@@ -226,6 +226,12 @@ class Sender {
 			} elseif ( $json && isset( $json['message'] ) ) {
 				$error_msg .= ' - ' . $json['message'];
 			}
+
+			Logger::error( "Erreur API Postal ($http_code)", [
+				'server_id' => $server['id'],
+				'response'  => $body
+			]);
+
 			return [ 'success' => false, 'error' => $error_msg, 'response_time' => $response_time ];
 		}
 		
