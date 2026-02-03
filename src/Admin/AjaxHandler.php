@@ -122,6 +122,18 @@ class AjaxHandler {
 		else wp_send_json_error( [ 'message' => 'Not found' ] );
 	}
 
+	public function ajax_get_template_stats() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$name = sanitize_text_field( $_POST['template_name'] );
+		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
+
+		$stats = Stats::get_template_stats( $name, $days );
+
+		wp_send_json_success( [ 'stats' => $stats ] );
+	}
+
 	public function ajax_save_category() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );

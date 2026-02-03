@@ -773,6 +773,13 @@
                 $(e.currentTarget).addClass('active');
                 $modal.find('.pw-tab-content').removeClass('active');
                 $modal.find('#pw-tab-' + tab).addClass('active');
+
+                if (tab === 'stats') {
+                    const tplName = $('#pw-editor-name').val();
+                    if (tplName) {
+                        TemplateEditor.loadStats(tplName);
+                    }
+                }
             });
         }, 
          

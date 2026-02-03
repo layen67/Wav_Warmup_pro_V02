@@ -293,6 +293,52 @@ class Stats {
 		return $performance;
 	}
 
+	public static function get_template_stats( $template_name, $days = 30 ) {
+		global $wpdb;
+		$table_metrics = $wpdb->prefix . 'postal_metrics';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
+		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
+
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT m.event_type, SUM(m.count) as total
+			FROM $table_metrics m
+			JOIN $table_tpl t ON m.template_id = t.id
+			WHERE t.name = %s AND m.date >= %s
+			GROUP BY m.event_type",
+			$template_name,
+			$date_from
+		), ARRAY_A ) ?: [];
+
+		$stats = [
+			'sent' => 0, 'delivered' => 0, 'opened' => 0, 'clicked' => 0, 'bounced' => 0, 'delayed' => 0, 'held' => 0
+		];
+
+		foreach ( $results as $r ) {
+			$type = $r['event_type'];
+			// Map 'sent' to 'delivered' as per Postal conventions in this plugin
+			$mapped_type = ( $type === 'sent' ) ? 'delivered' : $type;
+
+			if ( isset( $stats[$mapped_type] ) ) {
+				$stats[$mapped_type] += (int) $r['total'];
+			} else {
+				// Keep original if not mapped specifically
+				if ( !isset($stats[$type]) ) $stats[$type] = 0;
+				$stats[$type] += (int) $r['total'];
+			}
+		}
+
+		// If we tracked 'delivered' separately from 'sent' in webhook, we might want to sum them or treat them distinctly.
+		// For now, let's assume 'sent' webhook event contributes to delivered count.
+
+		// Calculate rates
+		$total_delivered = $stats['delivered'] ?? 0;
+		$stats['open_rate'] = $total_delivered > 0 ? round( ( $stats['opened'] / $total_delivered ) * 100, 1 ) : 0;
+		$stats['click_rate'] = $total_delivered > 0 ? round( ( $stats['clicked'] / $total_delivered ) * 100, 1 ) : 0;
+		$stats['bounce_rate'] = $total_delivered > 0 ? round( ( $stats['bounced'] / $total_delivered ) * 100, 1 ) : 0;
+
+		return $stats;
+	}
+
 	public static function get_global_stats( $days = 30 ) {
 		global $wpdb;
 		$stats_table = $wpdb->prefix . 'postal_stats';

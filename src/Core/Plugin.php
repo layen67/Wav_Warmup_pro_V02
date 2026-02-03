@@ -46,7 +46,7 @@ class Plugin {
 		$ajax_actions = [
 			'test_server', 'regenerate_secret', 'get_dashboard_data',
 			'clear_logs', 'clear_cache', 'export_stats', 'get_all_templates',
-			'save_template', 'toggle_favorite', 'get_template', 'delete_template',
+			'save_template', 'toggle_favorite', 'get_template', 'get_template_stats', 'delete_template',
 			'duplicate_template', 'move_template', 'update_template_status',
 			'get_template_versions', 'restore_template_version', 'reorder_templates',
 			'bulk_action_templates', 'export_template', 'import_templates',
