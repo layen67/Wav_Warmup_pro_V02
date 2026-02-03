@@ -81,7 +81,8 @@ class AjaxHandler {
 		$data = [
 			'subject'   => array_map( 'sanitize_text_field', $_POST['variants']['subject'] ?? [] ),
 			'text'      => array_map( 'sanitize_textarea_field', $_POST['variants']['text'] ?? [] ),
-			'html'      => array_map( 'wp_kses_post', $_POST['variants']['html'] ?? [] ),
+			// Fix HTML preservation: Use stripslashes to handle magic quotes but avoid wp_kses/sanitize to keep raw HTML intact
+			'html'      => array_map( 'stripslashes', $_POST['variants']['html'] ?? [] ),
 			'from_name' => array_map( 'sanitize_text_field', $_POST['variants']['from_name'] ?? [] ),
 			'mailto_subject'   => array_map( 'sanitize_text_field', $_POST['variants']['mailto_subject'] ?? [] ),
 			'mailto_body'      => array_map( 'sanitize_textarea_field', $_POST['variants']['mailto_body'] ?? [] ),

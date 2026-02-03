@@ -126,6 +126,26 @@
                     alert('Au moins une variante est requise pour ce champ.');
                 }
             });
+
+            // Initialize HTML toggles if present
+            if (type === 'html') {
+                $item.find('.pw-html-toggle').on('click', function() {
+                    const mode = $(this).data('mode');
+                    const $parent = $(this).closest('.pw-variant-item');
+
+                    $parent.find('.pw-html-toggle').removeClass('active');
+                    $(this).addClass('active');
+
+                    if (mode === 'preview') {
+                        const html = $parent.find('textarea').val();
+                        $parent.find('textarea').hide();
+                        $parent.find('.pw-html-preview').html(html).show();
+                    } else {
+                        $parent.find('.pw-html-preview').hide();
+                        $parent.find('textarea').show();
+                    }
+                });
+            }
         },
 
         openBulkAdd(type) {

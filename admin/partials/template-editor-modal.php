@@ -207,11 +207,56 @@ if (!defined('ABSPATH')) exit;
 </div>
 
 <script type="text/template" id="pw-variant-item-template">
-    <div class="pw-variant-item">
-        <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
+    <div class="pw-variant-item" data-type="<%- type %>">
+        <% if (type === 'html') { %>
+            <div class="pw-variant-toolbar">
+                <button type="button" class="pw-html-toggle active" data-mode="code">Code</button>
+                <button type="button" class="pw-html-toggle" data-mode="preview">Preview</button>
+            </div>
+        <% } %>
+        <div class="pw-variant-editor">
+            <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
+            <% if (type === 'html') { %>
+                <div class="pw-html-preview" style="display:none;"></div>
+            <% } %>
+        </div>
         <button type="button" class="pw-remove-variant">&times;</button>
     </div>
 </script>
+
+<style>
+.pw-variant-item {
+    position: relative;
+    margin-bottom: 10px;
+}
+.pw-variant-toolbar {
+    margin-bottom: 5px;
+    display: flex;
+    gap: 0;
+}
+.pw-html-toggle {
+    padding: 3px 10px;
+    background: #f0f0f1;
+    border: 1px solid #c3c4c7;
+    cursor: pointer;
+    font-size: 11px;
+}
+.pw-html-toggle:first-child { border-radius: 3px 0 0 3px; border-right: none; }
+.pw-html-toggle:last-child { border-radius: 0 3px 3px 0; }
+.pw-html-toggle.active {
+    background: #fff;
+    border-bottom-color: #fff;
+    font-weight: 600;
+}
+.pw-html-preview {
+    border: 1px solid #c3c4c7;
+    padding: 10px;
+    background: #fff;
+    min-height: 100px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+</style>
 
 <style>
 .pw-header-btns {
