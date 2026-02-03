@@ -1,0 +1,16 @@
+{
+  "name": "postal-warmup-pro",
+  "version": "3.2.0",
+  "description": "WordPress Plugin Build Scripts",
+  "scripts": {
+    "build": "npm run build:js && npm run build:css",
+    "build:js": "terser admin/assets/js/*.js -o admin/assets/js/admin.min.js --compress --mangle",
+    "build:css": "postcss admin/assets/css/*.css -o admin/assets/css/admin.min.css"
+  },
+  "devDependencies": {
+    "terser": "^5.19.2",
+    "postcss": "^8.4.31",
+    "postcss-cli": "^10.1.0",
+    "cssnano": "^6.0.1"
+  }
+}

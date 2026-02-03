@@ -1,0 +1,19 @@
+{
+    "subject": [
+        "Bienvenue",
+        "1234",
+        "sssdd",
+        "qSDQd",
+        "wfsdfsdf"
+    ],
+    "text": [
+        "Bonjour,\r\n\r\nCeci est un test."
+    ],
+    "html": [
+        "<p>Bonjour,<\/p><p>Ceci est un test.<\/p>"
+    ],
+    "from_name": [
+        "Support"
+    ],
+    "default_label": ""
+}

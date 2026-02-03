@@ -1,0 +1,285 @@
+/* admin/css/admin.css - Core Plugin Styles */
+
+:root {
+    /* Palette - Slate & Indigo Theme */
+    --pw-primary: #4f46e5;       /* Indigo 600 */
+    --pw-primary-hover: #4338ca; /* Indigo 700 */
+    --pw-primary-light: #eef2ff; /* Indigo 50 */
+    
+    --pw-bg: #f8fafc;            /* Slate 50 */
+    --pw-surface: #ffffff;
+    --pw-surface-alt: #f1f5f9;   /* Slate 100 */
+    
+    --pw-border: #e2e8f0;        /* Slate 200 */
+    --pw-border-hover: #cbd5e1;  /* Slate 300 */
+    
+    --pw-text-main: #0f172a;     /* Slate 900 */
+    --pw-text-body: #334155;     /* Slate 700 */
+    --pw-text-muted: #64748b;    /* Slate 500 */
+    --pw-text-light: #94a3b8;    /* Slate 400 */
+    
+    --pw-success: #10b981;       /* Emerald 500 */
+    --pw-success-bg: #ecfdf5;    /* Emerald 50 */
+    --pw-warning: #f59e0b;       /* Amber 500 */
+    --pw-warning-bg: #fffbeb;    /* Amber 50 */
+    --pw-danger: #ef4444;        /* Red 500 */
+    --pw-danger-bg: #fef2f2;     /* Red 50 */
+    
+    /* Spacing & Layout */
+    --pw-radius-sm: 6px;
+    --pw-radius: 12px;
+    --pw-radius-lg: 16px;
+    
+    --pw-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --pw-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --pw-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --pw-shadow-focus: 0 0 0 3px rgba(79, 70, 229, 0.3);
+    
+    --pw-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Base Plugin Wrapper */
+.pw-dashboard,
+.pw-servers-page,
+.pw-stats-page,
+.pw-logs-page,
+.pw-settings-page {
+    font-family: var(--pw-font-sans);
+    color: var(--pw-text-body);
+    margin: 24px 24px 0 0;
+    max-width: 1600px;
+}
+
+.pw-dashboard * { box-sizing: border-box; }
+
+/* === Common Headers === */
+.pw-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+}
+
+.pw-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--pw-text-main);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+}
+
+.pw-header h1 .dashicons {
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
+    color: var(--pw-primary);
+}
+
+/* === Dashboard Cards (Modern V3) === */
+.pw-stats-widgets {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.pw-stat-card {
+    background: var(--pw-surface);
+    border: 1px solid var(--pw-border);
+    border-radius: var(--pw-radius);
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: var(--pw-shadow-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.pw-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--pw-shadow);
+    border-color: var(--pw-primary-light);
+}
+
+.pw-stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.pw-stat-icon .dashicons {
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+}
+
+/* Icon Variations */
+.pw-stat-icon.primary { background: var(--pw-primary-light); color: var(--pw-primary); }
+.pw-stat-icon.success { background: var(--pw-success-bg); color: var(--pw-success); }
+.pw-stat-icon.warning { background: var(--pw-warning-bg); color: var(--pw-warning); }
+.pw-stat-icon.error { background: var(--pw-danger-bg); color: var(--pw-danger); }
+
+.pw-stat-content { flex: 1; }
+
+.pw-stat-label {
+    display: block;
+    color: var(--pw-text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pw-stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--pw-text-main);
+    line-height: 1.1;
+}
+
+/* === Dashboard Grid Layout === */
+.pw-dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 32px;
+    margin-bottom: 32px;
+}
+
+@media (max-width: 1200px) {
+    .pw-dashboard-grid { grid-template-columns: 1fr; }
+}
+
+/* === Content Cards / Widgets === */
+.pw-card, .pw-dashboard-widget {
+    background: var(--pw-surface);
+    border: 1px solid var(--pw-border);
+    border-radius: var(--pw-radius);
+    box-shadow: var(--pw-shadow-sm);
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.pw-card-header, .pw-widget-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--pw-border);
+    background: var(--pw-surface); /* Clean white header */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pw-card-header h3, .pw-widget-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--pw-text-main);
+}
+
+.pw-card-body, .pw-widget-content {
+    padding: 24px;
+    flex: 1;
+}
+
+/* === Activity List === */
+.pw-activity-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.pw-activity-item {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--pw-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.pw-activity-item:last-child { border-bottom: none; }
+
+.pw-activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pw-activity-time {
+    color: var(--pw-text-light);
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.pw-activity-status {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.badge-success { background: var(--pw-success-bg); color: var(--pw-success); }
+.badge-error, .badge-failed { background: var(--pw-danger-bg); color: var(--pw-danger); }
+.badge-warning { background: var(--pw-warning-bg); color: var(--pw-warning); }
+
+.pw-activity-msg {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--pw-text-main);
+}
+
+.pw-activity-meta {
+    font-size: 12px;
+    color: var(--pw-text-muted);
+    display: flex;
+    gap: 12px;
+}
+
+/* === Form Elements Global Override === */
+input[type="text"], input[type="email"], input[type="number"], select, textarea {
+    border: 1px solid var(--pw-border) !important;
+    border-radius: var(--pw-radius-sm) !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+    color: var(--pw-text-main) !important;
+    box-shadow: none !important;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: var(--pw-primary) !important;
+    box-shadow: var(--pw-shadow-focus) !important;
+    outline: none !important;
+}
+
+/* === Buttons Global Override === */
+.button.button-primary {
+    background: var(--pw-primary) !important;
+    border-color: var(--pw-primary) !important;
+    color: white !important;
+    text-shadow: none !important;
+    box-shadow: var(--pw-shadow-sm) !important;
+    border-radius: var(--pw-radius-sm) !important;
+    padding: 6px 16px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s !important;
+}
+
+.button.button-primary:hover {
+    background: var(--pw-primary-hover) !important;
+    transform: translateY(-1px);
+}
+
+/* === Responsive Utility === */
+@media (max-width: 768px) {
+    .pw-dashboard { margin-right: 0; }
+    .pw-stats-widgets { grid-template-columns: 1fr; }
+}

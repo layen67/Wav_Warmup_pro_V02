@@ -1,0 +1,22 @@
+# Core
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.log.*
+
+# Dependencies
+vendor/
+node_modules/
+
+# Build
+admin/assets/js/*.min.js
+admin/assets/css/*.min.css
+
+# Env
+.env
+
+# Others
+/tests/
+/report/
+*.zip
