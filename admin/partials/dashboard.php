@@ -21,7 +21,7 @@ $recent_errors = PW_Stats::get_recent_errors(5);
     </h1>
 
     <!-- Statistiques principales -->
-    <div class="pw-stats-cards">
+    <div class="pw-stats-widgets">
         <div class="pw-stat-card">
             <div class="pw-stat-icon">
                 <span class="dashicons dashicons-email-alt"></span>
@@ -188,10 +188,17 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                     <tr>
                         <td><?php _e('URL du webhook', 'postal-warmup'); ?></td>
                         <td>
+                            <?php
+                            $webhook_url = rest_url('postal-warmup/v1/webhook');
+                            $secret = get_option('pw_webhook_secret');
+                            if ($secret) {
+                                $webhook_url = add_query_arg('token', $secret, $webhook_url);
+                            }
+                            ?>
                             <code style="font-size: 11px;">
-                                <?php echo rest_url('postal-warmup/v1/webhook'); ?>
+                                <?php echo esc_url($webhook_url); ?>
                             </code>
-                            <button type="button" class="button button-small pw-copy-btn" data-clipboard="<?php echo esc_attr(rest_url('postal-warmup/v1/webhook')); ?>">
+                            <button type="button" class="button button-small pw-copy-btn" data-clipboard="<?php echo esc_attr($webhook_url); ?>">
                                 <?php _e('Copier', 'postal-warmup'); ?>
                             </button>
                         </td>
