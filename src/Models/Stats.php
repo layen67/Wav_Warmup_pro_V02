@@ -315,15 +315,16 @@ class Stats {
 
 		foreach ( $results as $r ) {
 			$type = $r['event_type'];
-			// Map 'sent' to 'delivered' as per Postal conventions in this plugin
-			$mapped_type = ( $type === 'sent' ) ? 'delivered' : $type;
 
-			if ( isset( $stats[$mapped_type] ) ) {
-				$stats[$mapped_type] += (int) $r['total'];
-			} else {
-				// Keep original if not mapped specifically
-				if ( !isset($stats[$type]) ) $stats[$type] = 0;
+			// Always add to the specific type found
+			if ( isset( $stats[$type] ) ) {
 				$stats[$type] += (int) $r['total'];
+			}
+
+			// Map 'sent' to 'delivered' as per Postal conventions (Optimistic delivery)
+			// because Postal primarily sends 'MessageSent' which we log as 'sent'.
+			if ( $type === 'sent' ) {
+				$stats['delivered'] += (int) $r['total'];
 			}
 		}
 
