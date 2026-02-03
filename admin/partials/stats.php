@@ -80,8 +80,8 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
         <div class="pw-widget-header">
             <h2><?php printf(__('Évolution sur %d jours', 'postal-warmup'), $days); ?></h2>
         </div>
-        <div class="pw-widget-content">
-            <canvas id="pw-evolution-chart" width="400" height="150"></canvas>
+        <div class="pw-widget-content" style="height: 300px;">
+            <canvas id="pw-evolution-chart" width="400" height="80"></canvas>
         </div>
     </div>
     
@@ -325,7 +325,7 @@ jQuery(document).ready(function($) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'top',
