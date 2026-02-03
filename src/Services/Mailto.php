@@ -198,13 +198,20 @@ class Mailto {
 		
 		global $wpdb;
 		$table = $wpdb->prefix . 'postal_mailto_clicks';
+
+		// GDPR : Anonymisation ou désactivation
+		$ip_address = '';
+		if ( ! get_option( 'pw_disable_ip_logging', false ) ) {
+			$raw_ip = $this->get_client_ip();
+			$ip_address = function_exists( 'wp_privacy_anonymize_ip' ) ? wp_privacy_anonymize_ip( $raw_ip ) : $raw_ip;
+		}
 		
 		$result = $wpdb->insert( $table, array(
 			'template'      => $template,
 			'server_domain' => $server_domain,
 			'page_url'      => $page_url,
 			'user_agent'    => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( $_SERVER['HTTP_USER_AGENT'] ) : '',
-			'ip_address'    => $this->get_client_ip(),
+			'ip_address'    => $ip_address,
 			'clicked_at'    => current_time( 'mysql' )
 		) );
 		

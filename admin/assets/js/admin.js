@@ -113,7 +113,7 @@
 
         // --- GESTION DES TEMPLATES (Legacy/Inactifs - handled by templates-manager.js) ---
 
-        // --- DASHBOARD REALTIME ---
+        // --- DASHBOARD REALTIME (Optimized v3.2) ---
         let activityChart = null;
 
         if ($('.pw-dashboard').length) {
@@ -121,180 +121,135 @@
         }
 
         function initDashboard() {
-            $('#pw-refresh-stats-btn').on('click', function() {
+            // Refresh on period change
+            $('#pw-chart-period').on('change', function() {
                 refreshDashboard();
             });
 
             // Initial load
             refreshDashboard();
 
-            // Auto-refresh every 30s
-            setInterval(refreshDashboard, 30000);
+            // Auto-refresh every 60s
+            setInterval(refreshDashboard, 60000);
         }
 
         function refreshDashboard() {
-            const $btn = $('#pw-refresh-stats-btn');
-            $btn.addClass('is-loading').prop('disabled', true);
+            const days = $('#pw-chart-period').val() || 7;
 
-            // Fetch generic activity
             $.post(pwAdmin.ajaxurl, {
-                action: 'pw_get_latest_activity',
-                nonce: pwAdmin.nonce
+                action: 'pw_get_dashboard_data',
+                nonce: pwAdmin.nonce,
+                days: days
             }).done(function(res) {
                 if (res.success) {
-                    updateActivityList(res.data.logs);
-                    updateStatsWidgets(res.data.stats);
-                    updateActivityChart(res.data.chart);
+                    if (res.data.summary) updateStatsWidgets(res.data.summary);
+                    if (res.data.chart) updateActivityChart(res.data.chart);
+                    if (res.data.errors) updateErrorsList(res.data.errors);
                 }
-            }).always(function() {
-                $btn.removeClass('is-loading').prop('disabled', false);
             });
+        }
 
-            // Fetch Health (v3.2)
-            if ($('#pw-server-health-widget').length) {
-                $.post(pwAdmin.ajaxurl, {
-                    action: 'pw_get_server_health',
-                    nonce: pwAdmin.nonce
-                }).done(function(res) {
-                    if (res.success && res.data.servers.length) {
-                        // Aggregate generic
-                        let queue = 0;
-                        let throughput = 0;
-                        res.data.servers.forEach(s => {
-                            queue += s.queue || 0;
-                            throughput += s.throughput || 0;
-                        });
-                        $('#pw-health-queue').text(queue);
-                        $('#pw-health-throughput').text(throughput);
-                    }
-                });
-            }
+        function updateStatsWidgets(stats) {
+            $('#pw-d-total-sent').text( parseInt(stats.total_sent).toLocaleString() );
+            $('#pw-d-success-rate').text( stats.success_rate + '%' );
+            $('#pw-d-active-servers').text( stats.active_servers + ' / ' + stats.total_servers );
+
+             $('#pw-d-sent-today').html(
+                stats.sent_today +
+                ' <small style="font-size: 14px; color: ' + (parseFloat(stats.evolution) >= 0 ? '#46b450' : '#dc3232') + '">' +
+                '(' + (parseFloat(stats.evolution) >= 0 ? '+' : '') + stats.evolution + '%)</small>'
+            );
         }
 
         function updateActivityChart(chartData) {
-            const ctx = document.getElementById('pw-activity-chart');
+            const ctx = document.getElementById('pw-sends-chart');
             if (!ctx) return;
 
-            if (!chartData || !chartData.labels || chartData.labels.length === 0) {
-                const parent = ctx.parentElement;
-                if (parent) {
-                    parent.innerHTML = '<div class="pw-no-data" style="padding:40px; text-align:center; color:#646970;">' + 
-                                       '<span class="dashicons dashicons-chart-area" style="font-size:40px; width:40px; height:40px; margin-bottom:10px; opacity:0.3;"></span>' +
-                                       '<p>En attente de données pour le graphique...</p></div>';
-                }
-                return;
-            }
+            const labels = chartData.map(d => d.date);
+            const sent = chartData.map(d => parseInt(d.total_sent));
+            const success = chartData.map(d => parseInt(d.total_success));
+            const errors = chartData.map(d => parseInt(d.total_errors));
 
             if (activityChart) {
-                activityChart.data.labels = chartData.labels;
-                activityChart.data.datasets[0].data = chartData.data;
+                activityChart.data.labels = labels;
+                activityChart.data.datasets[0].data = sent;
+                activityChart.data.datasets[1].data = success;
+                activityChart.data.datasets[2].data = errors;
                 activityChart.update();
                 return;
             }
 
-            if (typeof Chart === 'undefined') return;
+             if (typeof Chart === 'undefined') return;
 
             activityChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: chartData.labels,
-                    datasets: [{
-                        label: 'Emails envoyés',
-                        data: chartData.data,
-                        borderColor: '#2271b1',
-                        backgroundColor: 'rgba(34, 113, 177, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 2,
-                        pointHoverRadius: 5
-                    }]
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Envoyés',
+                            data: sent,
+                            borderColor: '#2271b1',
+                            backgroundColor: 'rgba(34, 113, 177, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Succès',
+                            data: success,
+                            borderColor: '#46b450',
+                            backgroundColor: 'rgba(70, 180, 80, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Erreurs',
+                            data: errors,
+                            borderColor: '#dc3232',
+                            backgroundColor: 'rgba(220, 50, 50, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { position: 'top' }
                     },
                     scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: '#f0f0f1' }
-                        },
-                        x: {
-                            grid: { display: false }
-                        }
+                        y: { beginAtZero: true }
                     }
                 }
             });
         }
 
-        function updateActivityList(logs) {
-            const $list = $('#pw-realtime-activity');
-            $list.empty();
+        function updateErrorsList(errors) {
+            const $container = $('#pw-errors-widget-content');
+            if ( ! errors || errors.length === 0 ) {
+                 $container.html('<p class="pw-no-data"><span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span> Aucune erreur récente</p>');
+                 return;
+            }
 
-            logs.forEach(log => {
-                const level = String(log.level).toLowerCase();
-                const time = log.created_at.split(' ')[1];
-                const server = log.server_domain ? `[${log.server_domain.replace('www.', '')}]` : '';
-                const ctx = log.context ? JSON.parse(log.context) : {};
-                
-                let html = `
-                    <li class="pw-activity-item ${level}">
-                        <div class="pw-activity-header">
-                            <span class="pw-activity-time">${time}</span>
-                            <span class="pw-activity-server" title="${log.server_domain || ''}">${server}</span>
+            let html = '<ul class="pw-errors-list">';
+            errors.forEach(err => {
+                html += `
+                    <li class="pw-error-item">
+                        <div class="pw-error-level">
+                            <span class="pw-badge error">${escapeHtml(err.level)}</span>
                         </div>
-                        <div class="pw-activity-content">
-                            <span class="pw-activity-msg">${escapeHtml(log.message)}</span>`;
-                
-                if (ctx.subject) {
-                    html += `<span class="pw-activity-subject">"${escapeHtml(ctx.subject)}"</span>`;
-                }
-
-                if (log.email_from) {
-                    const prefix = log.email_from.split('@')[0];
-                    html += `
-                        <div class="pw-activity-meta">
-                            <span class="pw-activity-from">
-                                <span class="dashicons dashicons-arrow-right-alt"></span>
-                                <strong>${escapeHtml(prefix)}</strong>
-                                ${log.server_domain ? '@ ' + escapeHtml(log.server_domain) : ''}
-                            </span>`;
-                    
-                    if (log.email_to) {
-                        html += `<span class="pw-activity-to"> -> ${escapeHtml(log.email_to)}</span>`;
-                    }
-
-                    if (log.status) {
-                        html += `<span class="pw-activity-status badge-${log.status}">${log.status}</span>`;
-                    }
-
-                    if (ctx.bounce_type) {
-                        html += `<span class="pw-activity-badge warning">${escapeHtml(ctx.bounce_type)}</span>`;
-                    }
-
-                    if (ctx.message_id) {
-                        html += `<span class="pw-activity-id" title="Postal Message ID">#${ctx.message_id.substring(0, 8)}...</span>`;
-                    }
-
-                    html += `</div>`;
-                }
-
-                if (ctx.details) {
-                    html += `<div class="pw-activity-details">${escapeHtml(ctx.details)}</div>`;
-                }
-
-                html += `</div></li>`;
-                $list.append(html);
+                        <div class="pw-error-details">
+                            <div class="pw-error-message">${escapeHtml(err.message)}</div>
+                            <div class="pw-error-meta">
+                                ${err.server_domain ? '<span>' + escapeHtml(err.server_domain) + '</span> • ' : ''}
+                                <span>${escapeHtml(err.created_at)}</span>
+                            </div>
+                        </div>
+                    </li>`;
             });
-        }
-
-        function updateStatsWidgets(stats) {
-            $('#pw-total-sent').text(stats.total_sent.toLocaleString());
-            $('#pw-delivered-count').text((stats.delivered || 0).toLocaleString());
-            $('#pw-opened-count').text((stats.opened || 0).toLocaleString());
-            $('#pw-bounce-count').text((stats.bounces || 0).toLocaleString());
+            html += '</ul>';
+            $container.html(html);
         }
     });
 

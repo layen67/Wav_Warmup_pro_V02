@@ -13,6 +13,9 @@ class Settings {
 		register_setting( 'postal-warmup-settings', 'pw_global_tag', array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'warmup' ) );
 		add_settings_field( 'pw_global_tag', __( 'Tag Postal Global', 'postal-warmup' ), array( $this, 'global_tag_field' ), 'postal-warmup-settings', 'pw_general_section' );
 
+		register_setting( 'postal-warmup-settings', 'pw_disable_ip_logging', array( 'type' => 'boolean', 'default' => false ) );
+		add_settings_field( 'pw_disable_ip_logging', __( 'Conformité RGPD', 'postal-warmup' ), array( $this, 'disable_ip_logging_field' ), 'postal-warmup-settings', 'pw_general_section' );
+
 		// === Section Logs ===
 		add_settings_section( 'pw_logs_section', __( 'Gestion des Logs', 'postal-warmup' ), array( $this, 'logs_section_callback' ), 'postal-warmup-settings' );
 		register_setting( 'postal-warmup-settings', 'pw_enable_logging', array( 'type' => 'boolean', 'default' => true ) );
@@ -54,6 +57,12 @@ class Settings {
 		$value = get_option( 'pw_global_tag', 'warmup' );
 		echo '<input type="text" name="pw_global_tag" value="' . esc_attr( $value ) . '" class="regular-text">';
 		echo '<p class="description">' . __( 'Ce tag sera ajouté à tous les emails envoyés par le plugin pour faciliter le filtrage dans Postal.', 'postal-warmup' ) . '</p>';
+	}
+
+	public function disable_ip_logging_field() {
+		$value = get_option( 'pw_disable_ip_logging', false );
+		echo '<label><input type="checkbox" name="pw_disable_ip_logging" value="1" ' . checked( $value, true, false ) . '> ' . __( 'Désactiver le tracking des adresses IP (Mailto)', 'postal-warmup' ) . '</label>';
+		echo '<p class="description">' . __( 'Si désactivé, les IPs ne seront pas stockées lors des clics sur les liens mailto. Sinon, elles seront anonymisées (dernier octet masqué).', 'postal-warmup' ) . '</p>';
 	}
 
 	public function logs_section_callback() { echo '<p>' . __( 'Gérez la conservation des logs.', 'postal-warmup' ) . '</p>'; }
