@@ -17,10 +17,20 @@ class AjaxHandler {
 	public function ajax_test_server() {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
-		$server_id = (int) $_POST['server_id'];
-		$result = Sender::test_connection( $server_id );
-		if ( $result['success'] ) wp_send_json_success( $result );
-		else wp_send_json_error( $result );
+
+		try {
+			$server_id = (int) $_POST['server_id'];
+			$result = Sender::test_connection( $server_id );
+
+			if ( $result['success'] ) {
+				wp_send_json_success( $result );
+			} else {
+				wp_send_json_error( $result );
+			}
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Exception lors du test serveur : ' . $e->getMessage() );
+			wp_send_json_error( [ 'message' => 'Erreur critique : ' . $e->getMessage() ] );
+		}
 	}
 
 	public function ajax_regenerate_secret() {

@@ -219,7 +219,14 @@ class Sender {
 		]);
 		
 		if ( $http_code !== 200 ) {
-			return [ 'success' => false, 'error' => "HTTP $http_code", 'response_time' => $response_time ];
+			$error_msg = "HTTP $http_code";
+			$json = json_decode( $body, true );
+			if ( $json && isset( $json['data']['message'] ) ) {
+				$error_msg .= ' - ' . $json['data']['message'];
+			} elseif ( $json && isset( $json['message'] ) ) {
+				$error_msg .= ' - ' . $json['message'];
+			}
+			return [ 'success' => false, 'error' => $error_msg, 'response_time' => $response_time ];
 		}
 		
 		$data = json_decode( $body, true );
