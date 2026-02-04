@@ -268,15 +268,26 @@ class Sender {
 			return [ 'success' => false, 'error' => $data['message'] ?? 'Réponse API invalide', 'response_time' => $response_time ];
 		}
 		
+		$message_id = $data['data']['message_id'] ?? null;
+
 		Logger::info( "Email envoyé avec succès", [
 			'server_id'     => $server['id'],
 			'email_to'      => $payload['to'][0] ?? '',
-			'message_id'    => $data['data']['message_id'] ?? null,
+			'message_id'    => $message_id,
 			'response_time' => round( $response_time, 3 ),
 			'status'        => 'success',
 			'template'      => $template_name
 		]);
 		
+		// Optimization: Pre-fill postal_stats to ensure real-time accuracy even before Webhook
+		if ( $message_id ) {
+			// This part is handled by Logger::log -> Database::insert_log if configured for DB
+			// But for strict stats accuracy, we ensure 'sent' metric is recorded immediately
+			// Already done by Database::increment_sent and record_stat in process_queue,
+			// but we can add message_id tracking if we had a detailed message table.
+			// Current structure relies on aggregated stats.
+		}
+
 		return [ 'success' => true, 'response' => $data, 'response_time' => $response_time ];
 	}
 

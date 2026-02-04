@@ -78,7 +78,9 @@ class Activator {
 			KEY idx_server_id (server_id),
 			KEY idx_level (level),
 			KEY idx_created_at (created_at),
-			KEY idx_status (status)
+			KEY idx_status (status),
+			KEY idx_template_created (template_used, created_at),
+			KEY idx_server_created (server_id, created_at)
 		) $charset_collate;";
 		dbDelta( $sql_logs );
 

@@ -67,7 +67,7 @@ class Stats {
 			'evolution'      => $evolution
 		];
 
-		set_transient( 'pw_dashboard_stats', $results, 5 * MINUTE_IN_SECONDS );
+		set_transient( 'pw_dashboard_stats', $results, 1 * MINUTE_IN_SECONDS );
 		return $results;
 	}
 

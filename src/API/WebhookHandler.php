@@ -97,6 +97,9 @@ class WebhookHandler {
 			case 'MessageSent':
 				$this->track_metric( $payload, 'sent', $ctx );
 				break;
+			case 'MessageDelivered': // Explicitly handle Delivered
+				$this->track_metric( $payload, 'delivered', $ctx );
+				break;
 			case 'MessageDeliveryFailed':
 				$this->track_metric( $payload, 'failed', $ctx );
 				Logger::error( 'Échec de livraison', array_merge( $log_context, [ 'status' => 'failed' ] ) );
