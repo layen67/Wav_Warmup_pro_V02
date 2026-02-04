@@ -116,6 +116,12 @@
             const $item = $(html);
             $item.find('textarea').val(value);
             
+            // Remove toolbar and preview for unsupported types
+            if (!['subject', 'from_name', 'text', 'html'].includes(type)) {
+                $item.find('.pw-variant-toolbar').remove();
+                $item.find('.pw-variant-preview').remove();
+            }
+
             $container.append($item);
             
             $item.find('.pw-remove-variant').on('click', function() {

@@ -208,20 +208,16 @@ if (!defined('ABSPATH')) exit;
 
 <script type="text/template" id="pw-variant-item-template">
     <div class="pw-variant-item" data-type="<%- type %>">
-        <% if (['subject', 'from_name', 'text', 'html'].includes(type)) { %>
-            <div class="pw-variant-toolbar">
-                <div class="pw-toolbar-group">
-                    <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
-                    <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
-                </div>
-                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
+        <div class="pw-variant-toolbar">
+            <div class="pw-toolbar-group">
+                <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
+                <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
             </div>
-        <% } %>
+            <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
+        </div>
         <div class="pw-variant-editor">
             <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
-            <% if (['subject', 'from_name', 'text', 'html'].includes(type)) { %>
-                <div class="pw-variant-preview" style="display:none;"></div>
-            <% } %>
+            <div class="pw-variant-preview" style="display:none;"></div>
         </div>
         <button type="button" class="pw-remove-variant">&times;</button>
     </div>
