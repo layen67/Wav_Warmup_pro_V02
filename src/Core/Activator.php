@@ -256,5 +256,8 @@ class Activator {
 		if ( ! wp_next_scheduled( 'pw_daily_stats_aggregation' ) ) {
 			wp_schedule_event( time(), 'daily', 'pw_daily_stats_aggregation' );
 		}
+		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
+			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
+		}
 	}
 }

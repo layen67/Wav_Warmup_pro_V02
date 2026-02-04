@@ -99,6 +99,11 @@ class Plugin {
 		$this->loader->add_action( 'pw_daily_report', 'PostalWarmup\Services\EmailNotifications', 'send_daily_report' );
 		$this->loader->add_action( 'pw_cleanup_old_stats', 'PostalWarmup\Models\Stats', 'cleanup_old_stats' );
 		$this->loader->add_action( 'pw_daily_stats_aggregation', 'PostalWarmup\Models\Stats', 'aggregate_daily_stats' );
+
+		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
+		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
+			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
+		}
 	}
 
 	public function run() {
