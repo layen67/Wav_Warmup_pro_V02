@@ -228,9 +228,13 @@ class Stats {
 		global $wpdb;
 		$logs_table = $wpdb->prefix . 'postal_logs';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
+		// Exclude 'Worker: Traitement...' logs to avoid double counting (Attempt + Result)
 		return $wpdb->get_results( $wpdb->prepare(
 			"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
-			FROM $logs_table WHERE template_used IS NOT NULL AND created_at >= %s
+			FROM $logs_table
+			WHERE template_used IS NOT NULL
+			AND created_at >= %s
+			AND message != 'Worker: Traitement envoi email'
 			GROUP BY template_used ORDER BY usage_count DESC LIMIT %d",
 			$date_from, $limit
 		), ARRAY_A ) ?: [];
@@ -241,9 +245,13 @@ class Stats {
 		$logs_table = $wpdb->prefix . 'postal_logs';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
+		// Exclude 'Worker: Traitement...' logs to avoid double counting
 		$results = $wpdb->get_results( $wpdb->prepare(
 			"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
-			FROM $logs_table WHERE template_used IS NOT NULL AND created_at >= %s
+			FROM $logs_table
+			WHERE template_used IS NOT NULL
+			AND created_at >= %s
+			AND message != 'Worker: Traitement envoi email'
 			GROUP BY template_used",
 			$date_from
 		), ARRAY_A ) ?: [];
