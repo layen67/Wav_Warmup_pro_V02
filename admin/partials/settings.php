@@ -141,17 +141,6 @@ if (!defined('ABSPATH')) {
                 </td>
             </tr>
             <tr>
-                <th scope="row"><?php _e('Base de données', 'postal-warmup'); ?></th>
-                <td>
-                    <button type="button" class="button" id="pw-init-tables-btn" onclick="if(confirm('<?php _e('Ceci va tenter de recréer les tables manquantes. Continuer ?', 'postal-warmup'); ?>')) { window.location.href = '<?php echo admin_url('admin-post.php?action=pw_init_tables&_wpnonce=' . wp_create_nonce('pw_init_tables')); ?>'; }">
-                        <?php _e('Initialiser les tables', 'postal-warmup'); ?>
-                    </button>
-                    <p class="description">
-                        <?php _e('Force la création des tables de base de données si elles sont manquantes ou corrompues. Utile après une migration ou une erreur d\'installation.', 'postal-warmup'); ?>
-                    </p>
-                </td>
-            </tr>
-            <tr>
                 <th scope="row"><?php _e('Logs', 'postal-warmup'); ?></th>
                 <td>
                     <button type="button" class="button" id="pw-clear-logs-btn">
