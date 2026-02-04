@@ -155,11 +155,22 @@ class WebhookHandler {
 
 	private function handle_incoming_message( $data ) {
 		// Logic from original class-pw-webhook-handler.php
+		$id = $data['id'] ?? null;
 		$rcpt_to = $data['rcpt_to'] ?? '';
 		$mail_from = $data['mail_from'] ?? '';
 		$subject = $data['subject'] ?? '';
 
 		if ( empty( $rcpt_to ) ) return;
+
+		// Deduplication: Check if message ID already processed (valid 1 hour)
+		if ( $id ) {
+			$transient_key = 'pw_webhook_msg_' . $id;
+			if ( get_transient( $transient_key ) ) {
+				Logger::info( "Webhook ignoré (doublon)", [ 'message_id' => $id ] );
+				return;
+			}
+			set_transient( $transient_key, true, 3600 );
+		}
 
 		list( $prefix, $domain ) = $this->parse_email( $rcpt_to );
 		if ( ! $domain ) return;
@@ -167,12 +178,19 @@ class WebhookHandler {
 		$server = Database::get_server_by_domain( $domain );
 		if ( ! $server ) return;
 
+		// Loop Prevention: Do not reply if sender is one of our own servers
+		list( $from_prefix, $from_domain ) = $this->parse_email( $mail_from );
+		if ( $from_domain ) {
+			$sender_server = Database::get_server_by_domain( $from_domain );
+			if ( $sender_server ) {
+				Logger::warning( "Boucle détectée : Tentative de réponse à soi-même", [ 'from' => $mail_from, 'to' => $rcpt_to ] );
+				return;
+			}
+		}
+
 		Logger::info( "Message entrant", [ 'server_id' => $server['id'], 'from' => $mail_from, 'subject' => $subject ] );
 		
 		// Check limits and reply
-		// Reply logic calls Sender::send(...)
-		// For brevity and focus on structure, we call Sender logic
-		
 		if ( $this->check_rate_limits( $server['id'] ) ) {
 			Sender::send( $mail_from, $domain, $prefix, $server );
 		}
