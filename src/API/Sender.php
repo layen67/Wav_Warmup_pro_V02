@@ -142,6 +142,12 @@ class Sender {
 		$html      = \PostalWarmup\Services\TemplateLoader::pick_random( $template['html'] );
 		$from_name = \PostalWarmup\Services\TemplateLoader::pick_random( $template['from_name'] );
 		
+		// Attempt to decode Base64 if used for storage (must be done BEFORE placeholders)
+		$subject   = self::maybe_decode( $subject );
+		$text      = self::maybe_decode( $text );
+		$html      = self::maybe_decode( $html );
+		$from_name = self::maybe_decode( $from_name );
+
 		$vars = [
 			'email'  => $to,
 			'domain' => $domain,
@@ -173,12 +179,34 @@ class Sender {
 
 		if ( ! empty( $template['reply_to'] ) ) {
 			$reply_to = \PostalWarmup\Services\TemplateLoader::pick_random( $template['reply_to'] );
+			$reply_to = self::maybe_decode( $reply_to );
 			if ( ! empty( $reply_to ) ) {
 				$payload['reply_to'] = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $reply_to, $vars );
 			}
 		}
 
 		return apply_filters( 'pw_email_payload', $payload, $template, $vars );
+	}
+
+	private static function maybe_decode( $string ) {
+		if ( ! is_string( $string ) || empty( $string ) ) return $string;
+
+		// Optimization: If it has spaces (and not newlines), it's likely not a raw Base64 string suitable for storage
+		if ( strpos( $string, ' ' ) !== false ) return $string;
+
+		// Try to decode if it looks like Base64 (alphanumeric + / + = + whitespace)
+		if ( preg_match( '/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $string ) ) {
+			$decoded = base64_decode( $string, true );
+			if ( $decoded !== false ) {
+				// Robustness: Only accept if valid UTF-8
+				// This prevents false positives like "Hello" decoding to binary garbage
+				if ( mb_check_encoding( $decoded, 'UTF-8' ) ) {
+					return $decoded;
+				}
+			}
+		}
+
+		return $string;
 	}
 
 	private static function send_request( $server, $payload, $attempt, $template_name = null ) {

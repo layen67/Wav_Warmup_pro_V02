@@ -236,6 +236,25 @@ class Stats {
 		), ARRAY_A ) ?: [];
 	}
 
+	public static function get_all_templates_summary( $days = 30 ) {
+		global $wpdb;
+		$logs_table = $wpdb->prefix . 'postal_logs';
+		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
+
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
+			FROM $logs_table WHERE template_used IS NOT NULL AND created_at >= %s
+			GROUP BY template_used",
+			$date_from
+		), ARRAY_A ) ?: [];
+
+		$stats = [];
+		foreach ( $results as $row ) {
+			$stats[$row['template_used']] = $row;
+		}
+		return $stats;
+	}
+
 	public static function get_server_performance_by_prefix( $days = 30 ) {
 		global $wpdb;
 		$logs_table = $wpdb->prefix . 'postal_logs';
