@@ -71,32 +71,23 @@ class Sender {
 
 		$from_email = $prefix . '@' . $domain;
 		
-		Logger::info( "Worker: Traitement envoi email", [
-			'server_id'  => $server['id'],
-			'email_from' => $from_email,
-			'email_to'   => $to,
-			'retry'      => $retry_count
-		]);
-		
-		// Charger le template (using TemplateManager in src/Admin/TemplateManager but logic needs to be accessible in frontend/worker too? 
-		// Actually existing PW_Template_Loader was used. We should probably port PW_Template_Loader logic or use TemplateManager if it has loading logic.
-		// For now, let's assume we use TemplateManager::get_template() which wraps the loading logic.
-		// Wait, TemplateManager::get_template() calls PW_Template_Loader::load(). I need to make sure I have a way to load templates.
-		// I'll use the existing PW_Template_Loader logic, but I haven't ported it yet. 
-		// I should probably have put Template logic in Models or Services. 
-		// I will use `PostalWarmup\Admin\TemplateManager` for now as I will put the logic there or in `PostalWarmup\Services\TemplateLoader`. 
-		// I will create `PostalWarmup\Services\TemplateLoader` to separate concerns properly, but user plan didn't explicitly list it. 
-		// I will assume `PostalWarmup\Admin\TemplateManager` handles it for now as per my plan, OR I can add `Services\TemplateLoader` quickly. 
-		// Let's use `PostalWarmup\Admin\TemplateManager` but actually I need the loading logic which was in `includes/class-pw-template-loader.php`.
-		// I will check `admin/class-pw-template-manager.php` content again... it calls `PW_Template_Loader`.
-		// I need to implement `PostalWarmup\Services\TemplateLoader`. I will add it to the implementation.
-		
+		// Charger le template
 		$template = \PostalWarmup\Services\TemplateLoader::load( $prefix, $domain );
 		
 		// Fallback to 'null' template if specific template not found (Original behavior)
 		if ( ! $template ) {
 			$template = \PostalWarmup\Services\TemplateLoader::load( 'null', $domain );
 		}
+
+		$template_name = $template['name'] ?? 'unknown';
+
+		Logger::info( "Worker: Traitement envoi email", [
+			'server_id'  => $server['id'],
+			'email_from' => $from_email,
+			'email_to'   => $to,
+			'retry'      => $retry_count,
+			'template'   => $template_name
+		]);
 
 		// Ultimate fallback if 'null' template is also missing
 		if ( ! $template ) {
@@ -105,7 +96,7 @@ class Sender {
 		}
 		
 		$payload = self::build_payload( $to, $from_email, $template, $domain, $prefix );
-		$result = self::send_request( $server, $payload, $retry_count + 1 );
+		$result = self::send_request( $server, $payload, $retry_count + 1, $template_name );
 		
 		$response_time = isset( $result['response_time'] ) ? $result['response_time'] : 0;
 
@@ -129,10 +120,16 @@ class Sender {
 					array( $to, $domain, $prefix, $server_id, $retry_count + 1 ),
 					'postal-warmup'
 				);
-				Logger::warning( "Worker: Échec envoi, replanifié dans {$delay}s", [ 'error' => $result['error'] ] );
+				Logger::warning( "Worker: Échec envoi, replanifié dans {$delay}s", [
+					'error'    => $result['error'],
+					'template' => $template_name
+				] );
 			}
 		} else {
-			Logger::error( "Worker: Abandon après $max_retries tentatives", [ 'error' => $result['error'] ] );
+			Logger::error( "Worker: Abandon après $max_retries tentatives", [
+				'error'    => $result['error'],
+				'template' => $template_name
+			] );
 		}
 		
 		return $result;
@@ -163,7 +160,10 @@ class Sender {
 			'subject'    => $subject,
 			'plain_body' => $text,
 			'html_body'  => $html,
-			'headers'    => [ 'X-Warmup-Source' => 'PostalWarmupPro-v' . PW_VERSION ]
+			'headers'    => [
+				'X-Warmup-Source'   => 'PostalWarmupPro-v' . PW_VERSION,
+				'X-Warmup-Template' => $template['name'] ?? 'unknown'
+			]
 		];
 
 		$global_tag = get_option( 'pw_global_tag', 'warmup' );
@@ -181,7 +181,7 @@ class Sender {
 		return apply_filters( 'pw_email_payload', $payload, $template, $vars );
 	}
 
-	private static function send_request( $server, $payload, $attempt ) {
+	private static function send_request( $server, $payload, $attempt, $template_name = null ) {
 		$api_url = rtrim( $server['api_url'], '/' );
 		$api_key = $server['api_key']; // Already decrypted by Database model
 		$url = $api_url . '/send/message';
@@ -245,7 +245,8 @@ class Sender {
 			'email_to'      => $payload['to'][0] ?? '',
 			'message_id'    => $data['data']['message_id'] ?? null,
 			'response_time' => round( $response_time, 3 ),
-			'status'        => 'success'
+			'status'        => 'success',
+			'template'      => $template_name
 		]);
 		
 		return [ 'success' => true, 'response' => $data, 'response_time' => $response_time ];

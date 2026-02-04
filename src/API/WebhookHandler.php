@@ -85,31 +85,72 @@ class WebhookHandler {
 		$event = $data['event'] ?? '';
 		$payload = $data['payload'] ?? [];
 		
+		$ctx = $this->identify_context($payload);
+		$server_id = $ctx['server_id'];
+		$template = $ctx['template'];
+		$log_context = [
+			'server_id' => $server_id,
+			'template'  => $template
+		];
+
 		switch ( $event ) {
 			case 'MessageSent':
-				$this->track_metric( $payload, 'sent' );
+				$this->track_metric( $payload, 'sent', $ctx );
 				break;
 			case 'MessageDeliveryFailed':
-				$this->track_metric( $payload, 'failed' );
-				Logger::error( 'Échec de livraison', [ 'status' => 'failed' ] );
+				$this->track_metric( $payload, 'failed', $ctx );
+				Logger::error( 'Échec de livraison', array_merge( $log_context, [ 'status' => 'failed' ] ) );
 				break;
 			case 'MessageBounced':
-				$this->track_metric( $payload, 'bounced' );
-				Logger::warning( 'Message rebondi', [ 'status' => 'bounced' ] );
+				$this->track_metric( $payload, 'bounced', $ctx );
+				Logger::warning( 'Message rebondi', array_merge( $log_context, [ 'status' => 'bounced' ] ) );
 				break;
 			case 'MessageLinkClicked':
-				$this->track_metric( $payload, 'clicked' );
+				$this->track_metric( $payload, 'clicked', $ctx );
 				break;
 			case 'MessageLoaded':
-				$this->track_metric( $payload, 'opened' );
+				$this->track_metric( $payload, 'opened', $ctx );
 				break;
 			case 'DomainDNSError':
-				$this->track_metric( $payload, 'dns_error' );
-				Logger::critical( 'Erreur DNS détectée par Postal' );
+				$this->track_metric( $payload, 'dns_error', $ctx );
+				Logger::critical( 'Erreur DNS détectée par Postal', $log_context );
 				break;
 			default:
 				// Ignore others
 		}
+	}
+
+	private function identify_context( $payload ) {
+		$message = $payload['message'] ?? [];
+		$server_id = null;
+		$template_name = null;
+		$domain = null;
+
+		$headers = $message['headers'] ?? [];
+		$template_name = $headers['X-Warmup-Template'] ?? null;
+
+		if ( isset( $message['from'] ) ) {
+			list( $prefix, $d ) = $this->parse_email( $message['from'] );
+			$domain = $d;
+			if ( ! $template_name ) {
+				$template_name = $prefix; // Fallback
+			}
+		} elseif ( isset( $payload['domain'] ) ) {
+			$domain = $payload['domain'];
+		}
+
+		if ( $domain ) {
+			$server = Database::get_server_by_domain( $domain );
+			if ( $server ) {
+				$server_id = $server['id'];
+			}
+		}
+
+		return [
+			'server_id' => $server_id,
+			'template' => $template_name,
+			'domain' => $domain
+		];
 	}
 
 	private function handle_incoming_message( $data ) {
@@ -145,32 +186,24 @@ class WebhookHandler {
 		return ( count( $parts ) === 2 ) ? $parts : [ '', '' ];
 	}
 
-	private function track_metric( $payload, $event_type ) {
-		$message = $payload['message'] ?? [];
-		$server_id = null;
-		$template_name = null;
-
-		if ( isset( $message['from'] ) ) {
-			list( $prefix, $domain ) = $this->parse_email( $message['from'] );
-			$server = Database::get_server_by_domain( $domain );
-			if ( $server ) {
-				$server_id = $server['id'];
-				$template_name = $prefix; // We assume prefix is template name
-			}
-		} elseif ( isset( $payload['domain'] ) ) {
-			$server = Database::get_server_by_domain( $payload['domain'] );
-			if ( $server ) $server_id = $server['id'];
+	private function track_metric( $payload, $event_type, $ctx = null ) {
+		if ( $ctx === null ) {
+			$ctx = $this->identify_context( $payload );
 		}
+
+		$server_id = $ctx['server_id'];
+		$template_name = $ctx['template'];
+		$domain = $ctx['domain'];
 
 		if ( $server_id ) {
 			Database::update_detailed_metrics( $template_name, $server_id, $event_type );
 			
 			// Fix: Also record global stats for relevant events
 			if ( $event_type === 'sent' || $event_type === 'delivered' ) {
-				Database::increment_sent( $payload['domain'] ?? '', true );
+				Database::increment_sent( $domain, true );
 				Database::record_stat( $server_id, true );
 			} elseif ( in_array( $event_type, [ 'failed', 'bounced', 'dns_error' ] ) ) {
-				Database::increment_sent( $payload['domain'] ?? '', false );
+				Database::increment_sent( $domain, false );
 				Database::record_stat( $server_id, false );
 			}
 		}

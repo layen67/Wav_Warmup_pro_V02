@@ -22,6 +22,7 @@ class TemplateLoader {
 			if ( json_last_error() === JSON_ERROR_NONE ) {
 				// Inject meta data for Admin usage
 				$data['id'] = $db_template['id'];
+				$data['name'] = $name; // Ensure name is present
 				$data['folder_id'] = $db_template['folder_id'];
 				$data['status'] = $db_template['status'];
 				// Handle legacy tags format (string vs array)
@@ -41,6 +42,9 @@ class TemplateLoader {
 				$content = file_get_contents( $file );
 				$data = json_decode( $content, true );
 				if ( json_last_error() === JSON_ERROR_NONE ) {
+					if (!isset($data['name'])) {
+						$data['name'] = $name;
+					}
 					return $data;
 				}
 			}
