@@ -127,22 +127,63 @@
                 }
             });
 
-            // Initialize HTML toggles if present
-            if (type === 'html') {
-                $item.find('.pw-html-toggle').on('click', function() {
+            // Initialize Code/Preview toggles & Base64 logic for supported types
+            if (['subject', 'from_name', 'text', 'html'].includes(type)) {
+
+                // Toggle Logic
+                $item.find('.pw-toggle-btn').on('click', function() {
                     const mode = $(this).data('mode');
                     const $parent = $(this).closest('.pw-variant-item');
+                    const $textarea = $parent.find('textarea');
+                    const $preview = $parent.find('.pw-variant-preview');
 
-                    $parent.find('.pw-html-toggle').removeClass('active');
+                    $parent.find('.pw-toggle-btn').removeClass('active');
                     $(this).addClass('active');
 
                     if (mode === 'preview') {
-                        const html = $parent.find('textarea').val();
-                        $parent.find('textarea').hide();
-                        $parent.find('.pw-html-preview').html(html).show();
+                        let content = $textarea.val();
+                        // Try decode Base64 if needed
+                        if (content.match(/^[A-Za-z0-9+/=]+\s*$/) && content.length > 20) {
+                            try {
+                                content = decodeURIComponent(escape(window.atob(content)));
+                            } catch (e) {
+                                // Not valid base64 or other error, keep original
+                            }
+                        }
+
+                        // Render based on type
+                        if (type === 'html') {
+                            $preview.html(content);
+                        } else {
+                            $preview.text(content);
+                        }
+
+                        $textarea.hide();
+                        $preview.show();
                     } else {
-                        $parent.find('.pw-html-preview').hide();
-                        $parent.find('textarea').show();
+                        $preview.hide();
+                        $textarea.show();
+                    }
+                });
+
+                // Base64 Logic
+                $item.find('.pw-base64-btn').on('click', function() {
+                    const $parent = $(this).closest('.pw-variant-item');
+                    const $textarea = $parent.find('textarea');
+                    const raw = $textarea.val();
+
+                    if (!raw) return;
+
+                    try {
+                        // UTF-8 safe encoding
+                        const encoded = window.btoa(unescape(encodeURIComponent(raw)));
+                        $textarea.val(encoded);
+
+                        // Switch to code view to see result
+                        $parent.find('.pw-toggle-btn[data-mode="code"]').click();
+                    } catch (e) {
+                        console.error('Encoding error:', e);
+                        alert('Erreur lors de l\'encodage Base64');
                     }
                 });
             }

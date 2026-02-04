@@ -208,16 +208,19 @@ if (!defined('ABSPATH')) exit;
 
 <script type="text/template" id="pw-variant-item-template">
     <div class="pw-variant-item" data-type="<%- type %>">
-        <% if (type === 'html') { %>
+        <% if (['subject', 'from_name', 'text', 'html'].includes(type)) { %>
             <div class="pw-variant-toolbar">
-                <button type="button" class="pw-html-toggle active" data-mode="code">Code</button>
-                <button type="button" class="pw-html-toggle" data-mode="preview">Preview</button>
+                <div class="pw-toolbar-group">
+                    <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
+                    <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
+                </div>
+                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
             </div>
         <% } %>
         <div class="pw-variant-editor">
             <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
-            <% if (type === 'html') { %>
-                <div class="pw-html-preview" style="display:none;"></div>
+            <% if (['subject', 'from_name', 'text', 'html'].includes(type)) { %>
+                <div class="pw-variant-preview" style="display:none;"></div>
             <% } %>
         </div>
         <button type="button" class="pw-remove-variant">&times;</button>
@@ -232,29 +235,53 @@ if (!defined('ABSPATH')) exit;
 .pw-variant-toolbar {
     margin-bottom: 5px;
     display: flex;
-    gap: 0;
+    justify-content: space-between;
+    align-items: center;
 }
-.pw-html-toggle {
+.pw-toolbar-group {
+    display: flex;
+}
+.pw-toggle-btn {
     padding: 3px 10px;
     background: #f0f0f1;
     border: 1px solid #c3c4c7;
     cursor: pointer;
     font-size: 11px;
 }
-.pw-html-toggle:first-child { border-radius: 3px 0 0 3px; border-right: none; }
-.pw-html-toggle:last-child { border-radius: 0 3px 3px 0; }
-.pw-html-toggle.active {
+.pw-toggle-btn:first-child { border-radius: 3px 0 0 3px; border-right: none; }
+.pw-toggle-btn:last-child { border-radius: 0 3px 3px 0; }
+.pw-toggle-btn.active {
     background: #fff;
     border-bottom-color: #fff;
     font-weight: 600;
 }
-.pw-html-preview {
+.pw-base64-btn {
+    padding: 3px 10px;
+    font-size: 10px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #2271b1;
+}
+.pw-base64-btn:hover {
+    border-color: #2271b1;
+}
+.pw-variant-preview {
     border: 1px solid #c3c4c7;
     padding: 10px;
     background: #fff;
-    min-height: 100px;
+    min-height: 40px;
     max-height: 300px;
     overflow-y: auto;
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.pw-variant-item[data-type="html"] .pw-variant-preview {
+    font-family: initial;
+    white-space: normal;
+    word-break: normal;
 }
 </style>
 
