@@ -192,6 +192,27 @@
                         alert('Erreur lors de l\'encodage Base64');
                     }
                 });
+
+                // Decode Base64 Logic
+                $item.find('.pw-base64-decode-btn').on('click', function() {
+                    const $parent = $(this).closest('.pw-variant-item');
+                    const $textarea = $parent.find('textarea');
+                    const raw = $textarea.val().trim();
+
+                    if (!raw) return;
+
+                    try {
+                        // UTF-8 safe decoding
+                        const decoded = decodeURIComponent(escape(window.atob(raw)));
+                        $textarea.val(decoded);
+
+                        // Switch to code view to see result
+                        $parent.find('.pw-toggle-btn[data-mode="code"]').click();
+                    } catch (e) {
+                        console.error('Decoding error:', e);
+                        alert('Erreur : Contenu invalide ou non encodé en Base64.');
+                    }
+                });
             }
         },
 

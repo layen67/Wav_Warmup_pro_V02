@@ -213,7 +213,10 @@ if (!defined('ABSPATH')) exit;
                 <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
                 <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
             </div>
-            <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
+            <div class="pw-toolbar-group">
+                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
+                <button type="button" class="pw-base64-decode-btn" title="Décoder le contenu Base64">Décoder Base64</button>
+            </div>
         </div>
         <div class="pw-variant-editor">
             <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
@@ -262,6 +265,19 @@ if (!defined('ABSPATH')) exit;
 }
 .pw-base64-btn:hover {
     border-color: #2271b1;
+}
+.pw-base64-decode-btn {
+    padding: 3px 10px;
+    font-size: 10px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #4f46e5;
+    margin-left: 5px;
+}
+.pw-base64-decode-btn:hover {
+    border-color: #4f46e5;
 }
 .pw-variant-preview {
     border: 1px solid #c3c4c7;
