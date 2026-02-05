@@ -95,7 +95,9 @@ class WebhookHandler {
 
 		switch ( $event ) {
 			case 'MessageSent':
-				$this->track_metric( $payload, 'sent', $ctx );
+				// Optimization: Sender.php already records 'sent' on API success.
+				// We still update legacy metrics for safety but skip history insertion to avoid duplicates.
+				$this->track_metric( $payload, 'sent', $ctx, true );
 				break;
 			case 'MessageDelivered': // Explicitly handle Delivered
 				$this->track_metric( $payload, 'delivered', $ctx );
@@ -207,7 +209,7 @@ class WebhookHandler {
 		return ( count( $parts ) === 2 ) ? $parts : [ '', '' ];
 	}
 
-	private function track_metric( $payload, $event_type, $ctx = null ) {
+	private function track_metric( $payload, $event_type, $ctx = null, $skip_history = false ) {
 		if ( $ctx === null ) {
 			$ctx = $this->identify_context( $payload );
 		}
@@ -218,23 +220,25 @@ class WebhookHandler {
 
 		if ( $server_id ) {
 			// New Stats Architecture: Insert into postal_stats_history
-			global $wpdb;
-			$table_tpl = $wpdb->prefix . 'postal_templates';
-			$template_id = null;
-			if ( $template_name ) {
-				$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $template_name ) );
+			if ( ! $skip_history ) {
+				global $wpdb;
+				$table_tpl = $wpdb->prefix . 'postal_templates';
+				$template_id = null;
+				if ( $template_name ) {
+					$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $template_name ) );
+				}
+
+				$message_id = $payload['original_message']['id'] ?? $payload['message']['id'] ?? null;
+
+				Database::insert_stat_history( [
+					'server_id'   => $server_id,
+					'template_id' => $template_id,
+					'message_id'  => $message_id,
+					'event_type'  => $event_type,
+					'timestamp'   => current_time( 'mysql' ),
+					'meta'        => json_encode( [ 'template_name' => $template_name ] )
+				] );
 			}
-
-			$message_id = $payload['original_message']['id'] ?? $payload['message']['id'] ?? null;
-
-			Database::insert_stat_history( [
-				'server_id'   => $server_id,
-				'template_id' => $template_id,
-				'message_id'  => $message_id,
-				'event_type'  => $event_type,
-				'timestamp'   => current_time( 'mysql' ),
-				'meta'        => json_encode( [ 'template_name' => $template_name ] )
-			] );
 
 			// Legacy metrics updates (kept for backward compat or if needed by charts until fully refactored)
 			Database::update_detailed_metrics( $template_name, $server_id, $event_type );
