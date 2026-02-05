@@ -116,6 +116,7 @@ class Sender {
 				'server_id'   => $server['id'],
 				'template_id' => $prepared['id'], // Can be null if file/system
 				'message_id'  => $message_id,
+				'email_from'  => $from_email,
 				'event_type'  => 'sent',
 				'timestamp'   => current_time( 'mysql' ),
 				'meta'        => json_encode( [ 'template_name' => $template_name ] )

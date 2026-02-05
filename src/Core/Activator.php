@@ -239,6 +239,7 @@ class Activator {
 			server_id int NOT NULL,
 			template_id bigint DEFAULT NULL,
 			message_id varchar(255) DEFAULT NULL,
+			email_from varchar(255) DEFAULT NULL,
 			event_type varchar(50) NOT NULL,
 			timestamp datetime NOT NULL,
 			meta longtext DEFAULT NULL,
@@ -247,6 +248,7 @@ class Activator {
 			KEY idx_server_id (server_id),
 			KEY idx_template_id (template_id),
 			KEY idx_message_id (message_id),
+			KEY idx_email_from (email_from),
 			KEY idx_event_type (event_type),
 			KEY idx_timestamp (timestamp),
 			KEY idx_composite_stats (server_id, template_id, event_type, timestamp)

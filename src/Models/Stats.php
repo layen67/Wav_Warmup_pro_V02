@@ -248,8 +248,8 @@ class Stats {
 		return $wpdb->get_results( $wpdb->prepare(
 			"SELECT
 				t.name as template_used,
-				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.id END) as usage_count,
-				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered') THEN h.id END) as success_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as usage_count,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
 				0 as avg_response_time
 			FROM $table_stats h
 			JOIN $table_tpl t ON h.template_id = t.id
@@ -285,8 +285,8 @@ class Stats {
 			$results = $wpdb->get_results( $wpdb->prepare(
 				"SELECT
 					t.name as template_used,
-					SUM(CASE WHEN h.event_type = 'sent' THEN 1 ELSE 0 END) as usage_count,
-					SUM(CASE WHEN h.event_type IN ('delivered') THEN 1 ELSE 0 END) as success_count,
+					COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as usage_count,
+					COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
 					0 as avg_response_time
 				FROM $table_stats h
 				LEFT JOIN $table_tpl t ON h.template_id = t.id
@@ -334,54 +334,22 @@ class Stats {
 			), ARRAY_A ) ?: [];
 		}
 
-		// Note: History table does not currently store email_from explicitly (it's in meta).
-		// We need to parse meta OR rely on template usage if email_from is consistent per template.
-		// For now, this view might need to remain log-based until history stores email_from.
-		// But since the request is to use history...
-		// Let's assume for now we fall back to logs if history doesn't have it, but actually,
-		// "email_from" is a dynamic variable in templates. History table meta has 'template_name'.
-		// If we want detailed prefix performance, we need to extract it from meta JSON or add a column.
-		// Given the constraints, I will stick to the LOGS query for this specific method as it requires detailed FROM address data not easily indexable in the current history schema without parsing JSON.
-		// So I will revert the "Change to history" for this specific method and only add the fallback logic IF I had changed it.
-		// But I haven't changed it yet in previous steps.
-		// Wait, the user said "Performance ... est vide".
-		// This means `postal_logs` is empty or filtered out.
-		// Why would `postal_logs` be empty? Sender.php still writes to it.
-		// Ah, I added `AND message != 'Worker: Traitement envoi email'` to the fallback query in `get_top_templates`.
-		// Maybe `get_server_performance_by_prefix` needs adjustment?
-		// It counts `COUNT(*)`. If `postal_logs` has 2 entries (Traitement + Success), it counts 2.
-		// So it should NOT be empty. It should be double.
-		// If it's empty, then `postal_logs` has NO data.
-		// Did I break logging? `Sender.php` calls `Logger::info`.
-		// Let's verify `Sender.php`. Yes, it calls `Logger::info`.
-		// Maybe `email_from` is NULL?
-		// In `Sender.php`: `Logger::info( ..., ['email_from' => $from_email] )`.
-		// In `Logger.php`: `$data['email_from'] = isset($context['email_from']) ...`
-		// So it should work.
-
-		// If it is empty, it might be because of date filter? `$date_from` is 30 days ago.
-		// I will assume the user has fresh data.
-		// Maybe the user means "it is empty NOW because I cleared logs"?
-		// If they cleared logs and switched to history, this view (which relies on logs) becomes empty.
-		// Correct. If we move to `postal_stats_history`, we MUST support this view from history.
-		// But history doesn't have `email_from` column.
-		// I'll stick to legacy logs for this view for now, but ensure the query is robust.
+		// Use New History Table (email_from column added in latest update)
 
 		return $wpdb->get_results( $wpdb->prepare(
 			"SELECT 
 				s.domain as server_domain,
-				l.email_from,
-				COUNT(*) as total_sent,
-				SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) as success_count,
-				SUM(CASE WHEN l.status = 'delayed' THEN 1 ELSE 0 END) as delayed_count,
-				SUM(CASE WHEN l.status = 'held' THEN 1 ELSE 0 END) as held_count,
-				SUM(CASE WHEN l.status NOT IN ('success', 'delayed', 'held') THEN 1 ELSE 0 END) as error_count,
-				AVG(l.response_time) as avg_response_time
-			FROM $logs_table l
-			JOIN $servers_table s ON l.server_id = s.id
-			WHERE l.created_at >= %s AND l.email_from IS NOT NULL
-			AND l.message != 'Worker: Traitement envoi email' -- Avoid duplicates
-			GROUP BY s.domain, l.email_from
+				h.email_from,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as total_sent,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'delayed' THEN h.message_id END) as delayed_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'held' THEN h.message_id END) as held_count,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('failed', 'bounced') THEN h.message_id END) as error_count,
+				0 as avg_response_time
+			FROM $table_stats h
+			JOIN $servers_table s ON h.server_id = s.id
+			WHERE h.timestamp >= %s AND h.email_from IS NOT NULL
+			GROUP BY s.domain, h.email_from
 			ORDER BY s.domain ASC, total_sent DESC",
 			$date_from
 		), ARRAY_A ) ?: [];
