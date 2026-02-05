@@ -217,6 +217,26 @@ class WebhookHandler {
 		$domain = $ctx['domain'];
 
 		if ( $server_id ) {
+			// New Stats Architecture: Insert into postal_stats_history
+			global $wpdb;
+			$table_tpl = $wpdb->prefix . 'postal_templates';
+			$template_id = null;
+			if ( $template_name ) {
+				$template_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_tpl WHERE name = %s", $template_name ) );
+			}
+
+			$message_id = $payload['original_message']['id'] ?? $payload['message']['id'] ?? null;
+
+			Database::insert_stat_history( [
+				'server_id'   => $server_id,
+				'template_id' => $template_id,
+				'message_id'  => $message_id,
+				'event_type'  => $event_type,
+				'timestamp'   => current_time( 'mysql' ),
+				'meta'        => json_encode( [ 'template_name' => $template_name ] )
+			] );
+
+			// Legacy metrics updates (kept for backward compat or if needed by charts until fully refactored)
 			Database::update_detailed_metrics( $template_name, $server_id, $event_type );
 			
 			// Fix: Also record global stats for relevant events

@@ -226,39 +226,72 @@ class Stats {
 
 	public static function get_top_templates( $days = 7, $limit = 10 ) {
 		global $wpdb;
-		$logs_table = $wpdb->prefix . 'postal_logs';
+		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
-		// Exclude 'Worker: Traitement...' logs to avoid double counting (Attempt + Result)
+
+		// New Architecture: Query postal_stats_history
+		// Join with templates to get names (since history stores IDs usually, but meta has name)
+		// Or assume meta has name. Better to join for ID validity.
+		// Note: History stores 'sent' event for usage. 'delivered' for success? Or is 'sent' considered success?
+		// Sender.php logs 'sent' only on success API call.
+
 		return $wpdb->get_results( $wpdb->prepare(
-			"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
-			FROM $logs_table
-			WHERE template_used IS NOT NULL
-			AND created_at >= %s
-			AND message != 'Worker: Traitement envoi email'
-			GROUP BY template_used ORDER BY usage_count DESC LIMIT %d",
+			"SELECT
+				t.name as template_used,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.id END) as usage_count,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.id END) as success_count,
+				0 as avg_response_time -- History doesn't track response time yet efficiently, can add later
+			FROM $table_stats_history h
+			JOIN $table_tpl t ON h.template_id = t.id
+			WHERE h.timestamp >= %s
+			GROUP BY t.name
+			ORDER BY usage_count DESC
+			LIMIT %d",
 			$date_from, $limit
 		), ARRAY_A ) ?: [];
 	}
 
 	public static function get_all_templates_summary( $days = 30 ) {
 		global $wpdb;
-		$logs_table = $wpdb->prefix . 'postal_logs';
+		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// Exclude 'Worker: Traitement...' logs to avoid double counting
-		$results = $wpdb->get_results( $wpdb->prepare(
-			"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
-			FROM $logs_table
-			WHERE template_used IS NOT NULL
-			AND created_at >= %s
-			AND message != 'Worker: Traitement envoi email'
-			GROUP BY template_used",
-			$date_from
-		), ARRAY_A ) ?: [];
+		// Fallback to legacy Logs if History is empty (during migration/transition)
+		$count = $wpdb->get_var("SELECT COUNT(*) FROM $table_stats");
+		if ($count == 0) {
+			$logs_table = $wpdb->prefix . 'postal_logs';
+			$results = $wpdb->get_results( $wpdb->prepare(
+				"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
+				FROM $logs_table
+				WHERE template_used IS NOT NULL
+				AND created_at >= %s
+				AND message != 'Worker: Traitement envoi email'
+				GROUP BY template_used",
+				$date_from
+			), ARRAY_A ) ?: [];
+		} else {
+			// Use New History Table
+			$results = $wpdb->get_results( $wpdb->prepare(
+				"SELECT
+					t.name as template_used,
+					SUM(CASE WHEN h.event_type = 'sent' THEN 1 ELSE 0 END) as usage_count,
+					SUM(CASE WHEN h.event_type IN ('delivered') THEN 1 ELSE 0 END) as success_count,
+					0 as avg_response_time
+				FROM $table_stats h
+				LEFT JOIN $table_tpl t ON h.template_id = t.id
+				WHERE h.timestamp >= %s
+				GROUP BY t.name",
+				$date_from
+			), ARRAY_A ) ?: [];
+		}
 
 		$stats = [];
 		foreach ( $results as $row ) {
-			$stats[$row['template_used']] = $row;
+			if (!empty($row['template_used'])) {
+				$stats[$row['template_used']] = $row;
+			}
 		}
 		return $stats;
 	}

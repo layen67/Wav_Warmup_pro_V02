@@ -330,4 +330,16 @@ class Database {
 			)
 		);
 	}
+
+	public static function insert_stat_history( array $data ): bool {
+		global $wpdb;
+		$table = $wpdb->prefix . 'postal_stats_history';
+
+		$defaults = [
+			'created_at' => current_time( 'mysql' )
+		];
+		$data = wp_parse_args( $data, $defaults );
+
+		return (bool) $wpdb->insert( $table, $data );
+	}
 }

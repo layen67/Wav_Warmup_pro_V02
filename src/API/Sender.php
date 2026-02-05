@@ -4,7 +4,7 @@ namespace PostalWarmup\API;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
-use PostalWarmup\Admin\TemplateManager;
+use PostalWarmup\Core\TemplateEngine;
 
 /**
  * Classe d'envoi des emails via Postal
@@ -69,17 +69,10 @@ class Sender {
 			return [ 'error' => 'Serveur introuvable' ];
 		}
 
+		// Use TemplateEngine to prepare everything
+		$prepared = TemplateEngine::prepare_template( $prefix, $domain, $prefix, $to );
+		$template_name = $prepared['name'];
 		$from_email = $prefix . '@' . $domain;
-		
-		// Charger le template
-		$template = \PostalWarmup\Services\TemplateLoader::load( $prefix, $domain );
-		
-		// Fallback to 'null' template if specific template not found (Original behavior)
-		if ( ! $template ) {
-			$template = \PostalWarmup\Services\TemplateLoader::load( 'null', $domain );
-		}
-
-		$template_name = $template['name'] ?? 'unknown';
 
 		Logger::info( "Worker: Traitement envoi email", [
 			'server_id'  => $server['id'],
@@ -89,18 +82,45 @@ class Sender {
 			'template'   => $template_name
 		]);
 
-		// Ultimate fallback if 'null' template is also missing
-		if ( ! $template ) {
-			$template = \PostalWarmup\Services\TemplateLoader::get_fallback();
-			Logger::warning( "Worker: Template introuvable ($prefix) et template 'null' absent. Utilisation du fallback système." );
+		$payload = [
+			'to'         => [ $to ],
+			'from'       => "{$prepared['from_name']} <$from_email>",
+			'subject'    => $prepared['subject'],
+			'plain_body' => $prepared['text'],
+			'html_body'  => $prepared['html'],
+			'headers'    => [
+				'X-Warmup-Source'   => 'PostalWarmupPro-v' . PW_VERSION,
+				'X-Warmup-Template' => $template_name
+			]
+		];
+
+		if ( ! empty( $prepared['reply_to'] ) ) {
+			$payload['reply_to'] = $prepared['reply_to'];
 		}
-		
-		$payload = self::build_payload( $to, $from_email, $template, $domain, $prefix );
+
+		$global_tag = get_option( 'pw_global_tag', 'warmup' );
+		if ( ! empty( $global_tag ) ) {
+			$payload['tag'] = sanitize_text_field( $global_tag );
+		}
+
+		$payload = apply_filters( 'pw_email_payload', $payload, $prepared, [] );
+
 		$result = self::send_request( $server, $payload, $retry_count + 1, $template_name );
 		
 		$response_time = isset( $result['response_time'] ) ? $result['response_time'] : 0;
 
 		if ( $result['success'] ) {
+			// New Stats Logic: Insert into History
+			$message_id = $result['response']['data']['message_id'] ?? null;
+			Database::insert_stat_history( [
+				'server_id'   => $server['id'],
+				'template_id' => $prepared['id'], // Can be null if file/system
+				'message_id'  => $message_id,
+				'event_type'  => 'sent',
+				'timestamp'   => current_time( 'mysql' ),
+				'meta'        => json_encode( [ 'template_name' => $template_name ] )
+			] );
+
 			Database::increment_sent( $domain, true, $response_time );
 			Database::record_stat( $server['id'], true, $response_time );
 			return $result;
@@ -135,79 +155,6 @@ class Sender {
 		return $result;
 	}
 
-	private static function build_payload( $to, $from_email, $template, $domain, $prefix ) {
-		// Use TemplateLoader for placeholders and picking random
-		$subject   = \PostalWarmup\Services\TemplateLoader::pick_random( $template['subject'] );
-		$text      = \PostalWarmup\Services\TemplateLoader::pick_random( $template['text'] );
-		$html      = \PostalWarmup\Services\TemplateLoader::pick_random( $template['html'] );
-		$from_name = \PostalWarmup\Services\TemplateLoader::pick_random( $template['from_name'] );
-		
-		// Attempt to decode Base64 if used for storage (must be done BEFORE placeholders)
-		$subject   = self::maybe_decode( $subject );
-		$text      = self::maybe_decode( $text );
-		$html      = self::maybe_decode( $html );
-		$from_name = self::maybe_decode( $from_name );
-
-		$vars = [
-			'email'  => $to,
-			'domain' => $domain,
-			'local'  => $prefix,
-			'date'   => current_time( 'd/m/Y' ),
-			'time'   => current_time( 'H:i' ),
-		];
-		
-		$subject = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $subject, $vars );
-		$text    = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $text, $vars );
-		$html    = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $html, $vars );
-		
-		$payload = [
-			'to'         => [ $to ],
-			'from'       => "$from_name <$from_email>",
-			'subject'    => $subject,
-			'plain_body' => $text,
-			'html_body'  => $html,
-			'headers'    => [
-				'X-Warmup-Source'   => 'PostalWarmupPro-v' . PW_VERSION,
-				'X-Warmup-Template' => $template['name'] ?? 'unknown'
-			]
-		];
-
-		$global_tag = get_option( 'pw_global_tag', 'warmup' );
-		if ( ! empty( $global_tag ) ) {
-			$payload['tag'] = sanitize_text_field( $global_tag );
-		}
-
-		if ( ! empty( $template['reply_to'] ) ) {
-			$reply_to = \PostalWarmup\Services\TemplateLoader::pick_random( $template['reply_to'] );
-			$reply_to = self::maybe_decode( $reply_to );
-			if ( ! empty( $reply_to ) ) {
-				$payload['reply_to'] = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $reply_to, $vars );
-			}
-		}
-
-		return apply_filters( 'pw_email_payload', $payload, $template, $vars );
-	}
-
-	private static function maybe_decode( $string ) {
-		if ( ! is_string( $string ) || empty( $string ) ) return $string;
-
-		// Optimization: If it has spaces (and not newlines), it's likely not a raw Base64 string suitable for storage
-		if ( strpos( $string, ' ' ) !== false ) return $string;
-
-		// Try to decode if it looks like Base64 (alphanumeric + / + = + whitespace)
-		if ( preg_match( '/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $string ) ) {
-			$decoded = base64_decode( $string, true );
-			if ( $decoded !== false ) {
-				// Robustness: Only accept if valid UTF-8
-				// This prevents false positives like "Hello" decoding to binary garbage
-				if ( mb_check_encoding( $decoded, 'UTF-8' ) ) {
-					return $decoded;
-				}
-			}
-		}
-
-		return $string;
-	}
 
 	private static function send_request( $server, $payload, $attempt, $template_name = null ) {
 		$api_url = rtrim( $server['api_url'], '/' );
