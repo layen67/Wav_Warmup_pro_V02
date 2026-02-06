@@ -6,31 +6,31 @@
 (function($) {
     'use strict';
 
+    // --- HELPERS (Shared Scope) ---
+    function copyToClipboard(text) {
+        if (!text) return;
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+        } else {
+            fallbackCopy(text);
+        }
+    }
+
+    function fallbackCopy(text) {
+        const $temp = $('<textarea>');
+        $temp.css({ position: 'fixed', left: '-9999px', top: '0' });
+        $('body').append($temp);
+        $temp.val(text).select();
+        try { document.execCommand('copy'); } catch (err) { console.error('Erreur copie:', err); }
+        $temp.remove();
+    }
+
+    function escapeHtml(text) {
+        if (!text) return "";
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
     $(document).ready(function() {
-
-        // --- CLIPBOARD ---
-        function copyToClipboard(text) {
-            if (!text) return;
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
-            } else {
-                fallbackCopy(text);
-            }
-        }
-
-        function fallbackCopy(text) {
-            const $temp = $('<textarea>');
-            $temp.css({ position: 'fixed', left: '-9999px', top: '0' });
-            $('body').append($temp);
-            $temp.val(text).select();
-            try { document.execCommand('copy'); } catch (err) { console.error('Erreur copie:', err); }
-            $temp.remove();
-        }
-
-        function escapeHtml(text) {
-            if (!text) return "";
-            return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-        }
 
         // --- ACTIONS GLOBALES ---
         $(document).on('click', '.pw-copy-btn, #pw-copy-secret, .pw-copy-shortcode', function(e) {
@@ -241,14 +241,16 @@
                 server_id: serverId,
                 days: days
             }).done(function(res) {
-                if (res.success) {
+                if (res && res.success) {
                     renderDetailTable(res.data.stats, $container, serverId);
                     $container.data('loaded', true);
                 } else {
-                    $container.html('<div class="pw-error">' + (res.data.message || 'Erreur') + '</div>');
+                    const msg = (res && res.data && res.data.message) ? res.data.message : 'Erreur inconnue';
+                    $container.html('<div class="pw-error" style="color:red; padding:10px;">' + escapeHtml(msg) + '</div>');
                 }
-            }).fail(function() {
-                $container.html('<div class="pw-error">Erreur réseau</div>');
+            }).fail(function(xhr, status, error) {
+                console.error("AJAX Error:", status, error, xhr.responseText);
+                $container.html('<div class="pw-error" style="color:red; padding:10px;">Erreur réseau ou serveur: ' + escapeHtml(error || status) + '</div>');
             });
         }
 
