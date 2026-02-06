@@ -30,6 +30,55 @@
         return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    // Expose chart initializer for stats.php inline script
+    window.pwInitEvolutionChart = function(ctx, data) {
+        if (!data || !ctx || typeof Chart === 'undefined') return;
+
+        const labels = data.map(d => d.date);
+        const sent = data.map(d => parseInt(d.total_sent));
+        const success = data.map(d => parseInt(d.total_success));
+        const errors = data.map(d => parseInt(d.total_errors));
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Envoyés',
+                        data: sent,
+                        borderColor: '#2271b1',
+                        backgroundColor: 'rgba(34, 113, 177, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Succès',
+                        data: success,
+                        borderColor: '#46b450',
+                        backgroundColor: 'rgba(70, 180, 80, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Erreurs',
+                        data: errors,
+                        borderColor: '#dc3232',
+                        backgroundColor: 'rgba(220, 50, 50, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top' } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    };
+
     $(document).ready(function() {
 
         // --- ACTIONS GLOBALES ---
