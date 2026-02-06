@@ -267,7 +267,7 @@
                         <th class="pw-sortable" data-sort="template">Template / Préfixe <span class="dashicons dashicons-sort"></span></th>
                         <th class="pw-sortable is-sorted-desc" data-sort="sent">Sent <span class="dashicons dashicons-arrow-down-alt2"></span></th>
                         <th class="pw-sortable" data-sort="delivered">Delivered <span class="dashicons dashicons-sort"></span></th>
-                        <th class="pw-sortable" data-sort="opened">Opened <span class="dashicons dashicons-sort"></span></th>
+                        <th class="pw-sortable" data-sort="opened" title="Inclut les ouvertures automatiques (anti-spam, proxy images).">Opened <span class="dashicons dashicons-info" style="font-size:14px; color:#999;"></span> <span class="dashicons dashicons-sort"></span></th>
                         <th class="pw-sortable" data-sort="clicked">Clicked <span class="dashicons dashicons-sort"></span></th>
                         <th class="pw-sortable" data-sort="bounced">Bounced <span class="dashicons dashicons-sort"></span></th>
                         <th>Delayed</th>
