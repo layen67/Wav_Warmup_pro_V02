@@ -1,28 +1,34 @@
 <?php
 /**
- * Vue des statistiques détaillées (Refonte Professionnelle)
+ * Vue des statistiques détaillées (Refonte Professionnelle V3)
+ * Structure Accordéon Lazy-Load
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Période sélectionnée (Initial PHP render for SEO/Fallback)
+// Période sélectionnée
 $days = isset($_GET['days']) ? (int) $_GET['days'] : 30;
 $days = max(1, min(365, $days));
 
 $server_id = isset($_GET['server']) ? (int) $_GET['server'] : null;
 
-// Récupération des données (Server-side rendering initial)
-// Note: La logique de "null" grouping est gérée par get_server_performance_by_prefix
-$prefix_stats = PW_Stats::get_server_performance_by_prefix($days);
-$stats = $server_id 
+// Initial Data Fetching
+// 1. Global Stats for Charts (Lightweight)
+$global_stats = $server_id
     ? PW_Database::get_server_stats($server_id, $days)
     : PW_Stats::get_global_stats($days);
 
+// 2. Server List & Dropdown
 $servers = PW_Database::get_servers();
-$servers_stats = PW_Stats::get_servers_stats();
+
+// 3. Top Templates (Global)
 $top_templates = PW_Stats::get_top_templates($days, 10);
+
+// 4. Server Headers (Summary for Accordion) - Replaces heavy full load
+$server_headers = PW_Stats::get_server_stats_summary_filtered($days);
+
 ?>
 
 <div class="wrap pw-stats-page">
@@ -57,8 +63,9 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
                     </select>
                 </div>
                 
+                <!-- Server filter hidden if we want to show all in accordion, or used to filter accordion list -->
                 <div class="pw-filter-group">
-                    <label for="filter-server"><?php _e('Serveur', 'postal-warmup'); ?></label>
+                    <label for="filter-server"><?php _e('Serveur (Focus)', 'postal-warmup'); ?></label>
                     <select name="server" id="filter-server" class="pw-select">
                         <option value=""><?php _e('Tous les serveurs', 'postal-warmup'); ?></option>
                         <?php foreach ($servers as $server) : ?>
@@ -78,8 +85,7 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
         <a href="#tab-charts" class="nav-tab" data-tab="charts"><?php _e('Graphiques Avancés', 'postal-warmup'); ?></a>
         <a href="#tab-heatmap" class="nav-tab" data-tab="heatmap"><?php _e('Heatmap', 'postal-warmup'); ?></a>
     </h2>
-    
-    <!-- Content Wrapper for PDF Export -->
+
     <div id="pw-stats-export-area">
 
         <!-- Tab: General -->
@@ -95,101 +101,51 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
                 </div>
             </div>
 
-            <!-- Performance par Serveur et Préfixe (Détail Postal) -->
+            <!-- ACCORDEON: Performance par Serveur -->
             <div class="pw-dashboard-widget pw-card" style="margin-top: 20px;">
                 <div class="pw-widget-header">
                     <h2><?php _e('Performance par Serveur et Préfixe Email', 'postal-warmup'); ?></h2>
-                    <small style="color: #666;"><?php _e('Les envois sans template sont regroupés sous "null".', 'postal-warmup'); ?></small>
+                    <small style="color: #666;"><?php _e('Cliquez sur un serveur pour voir le détail.', 'postal-warmup'); ?></small>
                 </div>
-                <div class="pw-widget-content">
-                    <table class="wp-list-table widefat fixed striped pw-sortable-table" id="pw-detailed-stats-table">
-                        <thead>
-                            <tr>
-                                <th class="pw-sortable" data-sort="domain"><?php _e('Serveur / Préfixe', 'postal-warmup'); ?></th>
-                                <th class="pw-sortable is-sorted-desc" data-sort="sent" title="Total Sent">
-                                    <?php _e('Sent', 'postal-warmup'); ?> <span class="dashicons dashicons-arrow-down-alt2"></span>
-                                </th>
-                                <th class="pw-sortable" data-sort="delivered" title="Delivered Rate">
-                                    <?php _e('Delivered', 'postal-warmup'); ?> <span class="dashicons dashicons-sort"></span>
-                                </th>
-                                <th class="pw-sortable" data-sort="opened" title="Open Rate">
-                                    <?php _e('Opened', 'postal-warmup'); ?> <span class="dashicons dashicons-sort"></span>
-                                </th>
-                                <th class="pw-sortable" data-sort="clicked" title="Click Rate">
-                                    <?php _e('Clicked', 'postal-warmup'); ?> <span class="dashicons dashicons-sort"></span>
-                                </th>
-                                <th class="pw-sortable" data-sort="bounced" title="Bounced/Failed">
-                                    <?php _e('Bounced', 'postal-warmup'); ?> <span class="dashicons dashicons-sort"></span>
-                                </th>
-                                <th><?php _e('Delayed', 'postal-warmup'); ?></th>
-                                <th><?php _e('Held', 'postal-warmup'); ?></th>
-                                <th class="pw-sortable" data-sort="latency" title="Average Response Time">
-                                    <?php _e('Latency', 'postal-warmup'); ?> <span class="dashicons dashicons-sort"></span>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody id="pw-detailed-stats-body">
-                            <?php if (empty($prefix_stats)) : ?>
-                                <tr><td colspan="9"><?php _e('Aucune donnée détaillée disponible.', 'postal-warmup'); ?></td></tr>
-                            <?php else :
-                                $current_server = '';
-                                foreach ($prefix_stats as $s) :
-                                    // Logic handled by Model now (including 'null' grouping)
-                                    $prefix = $s['email_from'];
-                                    $domain = $s['server_domain'];
-                                    $is_new_server = ($current_server !== $domain);
-                                    if ($is_new_server) $current_server = $domain;
 
-                                    // Calc rates for display
-                                    $sent = $s['total_sent'];
-                                    $del_rate = $sent > 0 ? round(($s['success_count'] / $sent) * 100, 1) : 0;
-                                    $open_rate = $s['success_count'] > 0 ? round(($s['opened_count'] / $s['success_count']) * 100, 1) : 0;
-                                    $click_rate = $s['success_count'] > 0 ? round(($s['clicked_count'] / $s['success_count']) * 100, 1) : 0;
+                <div class="pw-accordion-container">
+                    <?php if (empty($server_headers)) : ?>
+                        <p class="pw-no-data"><?php _e('Aucune donnée pour la période sélectionnée.', 'postal-warmup'); ?></p>
+                    <?php else :
+                        foreach ($server_headers as $sh) :
+                            if ($server_id && $sh['id'] != $server_id) continue;
 
-                                    // Data attributes for sorting
-                                    // Using raw values for correct sorting
-                            ?>
-                                <?php if ($is_new_server) : ?>
-                                    <tr class="pw-server-header-row" data-server="<?php echo esc_attr($domain); ?>">
-                                        <td colspan="9"><strong><span class="dashicons dashicons-networking"></span> <?php echo esc_html($domain); ?></strong></td>
-                                    </tr>
-                                <?php endif; ?>
-                                <tr class="pw-stat-row"
-                                    data-domain="<?php echo esc_attr($domain . '-' . $prefix); ?>"
-                                    data-sent="<?php echo $sent; ?>"
-                                    data-delivered="<?php echo $del_rate; ?>"
-                                    data-opened="<?php echo $open_rate; ?>"
-                                    data-clicked="<?php echo $click_rate; ?>"
-                                    data-bounced="<?php echo $s['error_count']; ?>"
-                                    data-latency="<?php echo $s['avg_response_time']; ?>">
-
-                                    <td style="padding-left: 25px;">
-                                        <?php if ($prefix === 'null') : ?>
-                                            <em style="color: #888;">&lt;<?php _e('sans template', 'postal-warmup'); ?>&gt;</em>
-                                        <?php else : ?>
-                                            <code><?php echo esc_html($prefix); ?></code>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><?php echo number_format_i18n($sent); ?></td>
-                                    <td>
-                                        <div class="pw-progress-bar">
-                                            <div class="pw-progress-fill <?php echo $del_rate > 90 ? 'success' : 'warning'; ?>" style="width: <?php echo $del_rate; ?>%"></div>
-                                            <span><?php echo $s['success_count']; ?> (<?php echo $del_rate; ?>%)</span>
-                                        </div>
-                                    </td>
-                                    <td><?php echo $s['opened_count']; ?> <small class="pw-rate">(<?php echo $open_rate; ?>%)</small></td>
-                                    <td><?php echo $s['clicked_count']; ?> <small class="pw-rate">(<?php echo $click_rate; ?>%)</small></td>
-                                    <td><span class="pw-count bounced"><?php echo $s['error_count']; ?></span></td>
-                                    <td><span class="pw-count delayed"><?php echo $s['delayed_count']; ?></span></td>
-                                    <td><span class="pw-count held"><?php echo $s['held_count']; ?></span></td>
-                                    <td><?php echo number_format($s['avg_response_time'], 3); ?>s</td>
-                                </tr>
-                            <?php endforeach; endif; ?>
-                        </tbody>
-                    </table>
+                            $sent = (int)$sh['total_sent'];
+                            $rate = $sent > 0 ? round(($sh['total_success'] / $sent) * 100, 1) : 0;
+                            $errors = (int)$sh['total_errors'];
+                    ?>
+                        <div class="pw-accordion-item" data-server-id="<?php echo $sh['id']; ?>">
+                            <div class="pw-accordion-header">
+                                <div class="pw-header-title">
+                                    <span class="dashicons dashicons-networking"></span>
+                                    <strong><?php echo esc_html($sh['domain']); ?></strong>
+                                </div>
+                                <div class="pw-header-stats">
+                                    <span class="pw-stat-pill sent"><?php echo number_format_i18n($sent); ?> sent</span>
+                                    <span class="pw-stat-pill <?php echo $rate > 90 ? 'success' : 'warning'; ?>"><?php echo $rate; ?>% success</span>
+                                    <?php if ($errors > 0) : ?>
+                                        <span class="pw-stat-pill error"><?php echo $errors; ?> err</span>
+                                    <?php endif; ?>
+                                    <span class="dashicons dashicons-arrow-down-alt2 pw-chevron"></span>
+                                </div>
+                            </div>
+                            <div class="pw-accordion-body">
+                                <div class="pw-loading-placeholder">
+                                    <span class="spinner is-active" style="float:none;"></span> <?php _e('Chargement des détails...', 'postal-warmup'); ?>
+                                </div>
+                                <!-- Content populated via AJAX -->
+                            </div>
+                        </div>
+                    <?php endforeach; endif; ?>
                 </div>
             </div>
 
+            <!-- Bottom Widgets -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
                 <!-- Templates les plus utilisés -->
                 <div class="pw-dashboard-widget pw-card">
@@ -238,7 +194,7 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
                             </thead>
                             <tbody>
                                 <?php
-                                $recent_days = array_slice(array_reverse($stats), 0, 10);
+                                $recent_days = array_slice(array_reverse($global_stats), 0, 10);
                                 if (empty($recent_days)) : ?>
                                     <tr><td colspan="3"><?php _e('Aucune donnée', 'postal-warmup'); ?></td></tr>
                                 <?php else :
@@ -290,17 +246,16 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
                 </div>
                 <div class="pw-widget-content">
                     <div id="pw-heatmap-container" style="overflow-x: auto;">
-                        <!-- Heatmap Rendered by JS -->
                         <div class="pw-loading-placeholder"><?php _e('Chargement de la heatmap...', 'postal-warmup'); ?></div>
                     </div>
                 </div>
             </div>
         </div>
 
-    </div><!-- End Export Area -->
+    </div>
 </div>
 
-<!-- Inline CSS for new features (Dark Mode & Layout) -->
+<!-- Updated CSS for Accordion UI -->
 <style>
     /* Cards */
     .pw-card {
@@ -310,190 +265,134 @@ $top_templates = PW_Stats::get_top_templates($days, 10);
         padding: 15px;
     }
 
-    /* Filters */
-    .pw-filters-row {
-        display: flex;
-        gap: 20px;
-        align-items: flex-end;
-    }
-    .pw-filter-group {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-    }
-    .pw-filter-group label {
-        font-weight: 600;
-        font-size: 13px;
-        color: #1d2327;
-    }
-    .pw-select {
-        min-width: 150px;
-    }
+    /* Filters & Tabs (reused) */
+    .pw-filters-row { display: flex; gap: 20px; align-items: flex-end; }
+    .pw-filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .pw-filter-group label { font-weight: 600; font-size: 13px; color: #1d2327; }
+    .pw-select { min-width: 150px; }
+    .pw-tab-content { display: none; }
+    .pw-tab-content.active { display: block; }
 
-    /* Tabs */
-    .pw-tab-content {
-        display: none;
+    /* Accordion Styles */
+    .pw-accordion-container {
+        border-top: 1px solid #f0f0f1;
     }
-    .pw-tab-content.active {
-        display: block;
-    }
-
-    /* Table Sorting */
-    th.pw-sortable {
-        cursor: pointer;
-        position: relative;
-    }
-    th.pw-sortable:hover {
-        background: #f0f0f1;
-        color: #2271b1;
-    }
-    th.pw-sortable .dashicons {
-        font-size: 14px;
-        line-height: 1.5;
-        opacity: 0.3;
-        margin-left: 5px;
-    }
-    th.pw-sortable.is-sorted .dashicons,
-    th.pw-sortable.is-sorted-desc .dashicons {
-        opacity: 1;
-        color: #2271b1;
-    }
-
-    /* Progress Bars in Table */
-    .pw-progress-bar {
-        background: #f0f0f1;
-        border-radius: 3px;
-        height: 20px;
-        width: 100%;
-        position: relative;
+    .pw-accordion-item {
+        border: 1px solid #c3c4c7;
+        margin-bottom: 10px;
+        background: #fff;
+        border-radius: 4px;
         overflow: hidden;
+    }
+    .pw-accordion-header {
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f6f7f7;
+        cursor: pointer;
+        transition: background 0.2s ease;
+    }
+    .pw-accordion-header:hover {
+        background: #f0f0f1;
+    }
+    .pw-accordion-header.active {
+        background: #f0f0f1;
+        border-bottom: 1px solid #c3c4c7;
+    }
+    .pw-header-title {
+        font-size: 14px;
         display: flex;
         align-items: center;
+        gap: 8px;
     }
-    .pw-progress-fill {
-        height: 100%;
-        position: absolute;
-        left: 0;
-        top: 0;
+    .pw-header-stats {
+        display: flex;
+        align-items: center;
+        gap: 15px;
     }
+    .pw-stat-pill {
+        background: #e5e5e5;
+        border-radius: 12px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 500;
+        color: #50575e;
+    }
+    .pw-stat-pill.sent { background: #e6f6ff; color: #0073aa; }
+    .pw-stat-pill.success { background: #edf9ef; color: #46b450; }
+    .pw-stat-pill.warning { background: #fdf2d8; color: #dba617; }
+    .pw-stat-pill.error { background: #fbeaea; color: #d63638; }
+
+    .pw-chevron {
+        transition: transform 0.3s ease;
+        color: #a7aaad;
+    }
+    .pw-accordion-header.active .pw-chevron {
+        transform: rotate(180deg);
+    }
+
+    .pw-accordion-body {
+        display: none; /* Lazy load: hidden by default */
+        padding: 0;
+    }
+    .pw-accordion-body table {
+        border: none;
+        box-shadow: none;
+        margin-top: 0;
+    }
+    .pw-loading-placeholder {
+        padding: 20px;
+        text-align: center;
+        color: #646970;
+    }
+
+    /* Table & Progress (reused) */
+    th.pw-sortable { cursor: pointer; position: relative; }
+    th.pw-sortable:hover { background: #f0f0f1; color: #2271b1; }
+    th.pw-sortable.is-sorted .dashicons { opacity: 1; color: #2271b1; }
+    .pw-progress-bar { background: #f0f0f1; border-radius: 3px; height: 20px; width: 100%; position: relative; overflow: hidden; display: flex; align-items: center; }
+    .pw-progress-fill { height: 100%; position: absolute; left: 0; top: 0; }
     .pw-progress-fill.success { background: #d1e4dd; }
     .pw-progress-fill.warning { background: #fcefdc; }
-    .pw-progress-bar span {
-        position: relative;
-        z-index: 1;
-        padding-left: 8px;
-        font-size: 11px;
-        font-weight: 600;
-        color: #1d2327;
-    }
+    .pw-progress-bar span { position: relative; z-index: 1; padding-left: 8px; font-size: 11px; font-weight: 600; color: #1d2327; }
+    .pw-rate { color: #646970; font-size: 11px; }
+    .pw-chart-container { position: relative; height: 250px; width: 100%; }
+    .pw-heatmap-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .pw-heatmap-table th, .pw-heatmap-table td { border: 1px solid #ddd; padding: 5px; text-align: center; }
+    .pw-heatmap-table th.tpl-name { text-align: left; min-width: 150px; background: #f9f9f9; font-weight: bold; }
+    .pw-heatmap-cell { width: 30px; height: 20px; display: block; }
 
-    /* Rates small text */
-    .pw-rate {
-        color: #646970;
-        font-size: 11px;
-    }
-
-    /* Chart Containers */
-    .pw-chart-container {
-        position: relative;
-        height: 250px;
-        width: 100%;
-    }
-
-    /* Heatmap Grid */
-    .pw-heatmap-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 11px;
-    }
-    .pw-heatmap-table th, .pw-heatmap-table td {
-        border: 1px solid #ddd;
-        padding: 5px;
-        text-align: center;
-    }
-    .pw-heatmap-table th.tpl-name {
-        text-align: left;
-        min-width: 150px;
-        background: #f9f9f9;
-        font-weight: bold;
-    }
-    .pw-heatmap-cell {
-        width: 30px;
-        height: 20px;
-        display: block;
-    }
-
-    /* Dark Mode */
-    body.pw-dark-mode {
-        background: #1e1e1e;
-        color: #e0e0e0;
-    }
-    body.pw-dark-mode .wrap h1,
-    body.pw-dark-mode .pw-filter-group label {
-        color: #e0e0e0;
-    }
-    body.pw-dark-mode .pw-card {
-        background: #2d2d2d;
-        border-color: #444;
-        color: #e0e0e0;
-    }
-    body.pw-dark-mode .wp-list-table {
-        background: #2d2d2d;
-        border-color: #444;
-        color: #e0e0e0;
-    }
-    body.pw-dark-mode .wp-list-table th,
-    body.pw-dark-mode .wp-list-table td {
-        border-color: #444;
-        color: #e0e0e0;
-    }
-    body.pw-dark-mode .wp-list-table tr:nth-child(odd) {
-        background-color: #2d2d2d;
-    }
-    body.pw-dark-mode .wp-list-table tr:nth-child(even) {
-        background-color: #333;
-    }
-    body.pw-dark-mode .wp-list-table tr:hover {
-        background-color: #3d3d3d;
-    }
-    body.pw-dark-mode .pw-server-header-row td {
-        background-color: #383838 !important;
-        color: #fff;
-    }
-    body.pw-dark-mode .pw-progress-bar {
-        background: #444;
-    }
-    body.pw-dark-mode .pw-progress-bar span {
-        color: #fff;
-    }
-    body.pw-dark-mode .pw-progress-fill.success { background: #1b5e20; opacity: 0.6; }
-    body.pw-dark-mode .pw-progress-fill.warning { background: #e65100; opacity: 0.6; }
-    body.pw-dark-mode .nav-tab-wrapper {
-        border-bottom-color: #444;
-    }
-    body.pw-dark-mode .nav-tab {
-        background: #2d2d2d;
-        border-color: #444;
-        color: #ccc;
-    }
-    body.pw-dark-mode .nav-tab-active {
-        background: #3d3d3d;
-        border-bottom-color: #3d3d3d;
-        color: #fff;
-    }
-    body.pw-dark-mode .nav-tab:hover {
-        background: #3d3d3d;
-        color: #fff;
-    }
+    /* Dark Mode Overrides */
+    body.pw-dark-mode { background: #1e1e1e; color: #e0e0e0; }
+    body.pw-dark-mode .wrap h1, body.pw-dark-mode .pw-filter-group label { color: #e0e0e0; }
+    body.pw-dark-mode .pw-card { background: #2d2d2d; border-color: #444; color: #e0e0e0; }
+    body.pw-dark-mode .pw-accordion-item { border-color: #444; background: #2d2d2d; }
+    body.pw-dark-mode .pw-accordion-header { background: #333; color: #e0e0e0; }
+    body.pw-dark-mode .pw-accordion-header:hover { background: #3d3d3d; }
+    body.pw-dark-mode .pw-accordion-header.active { background: #3d3d3d; border-bottom-color: #444; }
+    body.pw-dark-mode .pw-stat-pill { background: #444; color: #ccc; }
+    body.pw-dark-mode .pw-stat-pill.sent { background: #132b3a; color: #72aee6; }
+    body.pw-dark-mode .pw-stat-pill.success { background: #1b3a24; color: #46b450; }
+    body.pw-dark-mode .pw-stat-pill.warning { background: #3a2e15; color: #f0c33c; }
+    body.pw-dark-mode .pw-stat-pill.error { background: #3a1515; color: #d63638; }
+    body.pw-dark-mode .wp-list-table { background: #2d2d2d; border-color: #444; color: #e0e0e0; }
+    body.pw-dark-mode .wp-list-table th, body.pw-dark-mode .wp-list-table td { border-color: #444; color: #e0e0e0; }
+    body.pw-dark-mode .wp-list-table tr:nth-child(odd) { background-color: #2d2d2d; }
+    body.pw-dark-mode .wp-list-table tr:nth-child(even) { background-color: #333; }
+    body.pw-dark-mode .pw-progress-bar { background: #444; }
+    body.pw-dark-mode .pw-progress-bar span { color: #fff; }
+    body.pw-dark-mode .nav-tab-wrapper { border-bottom-color: #444; }
+    body.pw-dark-mode .nav-tab { background: #2d2d2d; border-color: #444; color: #ccc; }
+    body.pw-dark-mode .nav-tab-active { background: #3d3d3d; border-bottom-color: #3d3d3d; color: #fff; }
 </style>
 
-<!-- Initial Render Script for Evolution Chart (others loaded via AJAX/JS) -->
+<!-- Initial Chart Script -->
 <script>
 jQuery(document).ready(function($) {
     if ($('#pw-evolution-chart').length) {
         const ctx = document.getElementById('pw-evolution-chart').getContext('2d');
-        const data = <?php echo json_encode(array_reverse($stats)); ?>;
-        // Basic render, full logic in admin.js
+        const data = <?php echo json_encode(array_reverse($global_stats)); ?>;
         if(window.pwInitEvolutionChart) window.pwInitEvolutionChart(ctx, data);
     }
 });

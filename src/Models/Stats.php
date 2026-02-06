@@ -305,111 +305,62 @@ class Stats {
 		return $stats;
 	}
 
-	public static function get_server_performance_by_prefix( $days = 30 ) {
+	public static function get_server_stats_summary_filtered( $days = 30 ) {
+		// Used for Accordion Headers (Lightweight)
 		global $wpdb;
-		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$stats_table = $wpdb->prefix . 'postal_stats';
 		$servers_table = $wpdb->prefix . 'postal_servers';
+		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
+
+		return $wpdb->get_results( $wpdb->prepare(
+			"SELECT
+				s.id,
+				s.domain,
+				SUM(st.sent_count) as total_sent,
+				SUM(st.success_count) as total_success,
+				SUM(st.error_count) as total_errors
+			FROM $servers_table s
+			LEFT JOIN $stats_table st ON s.id = st.server_id AND st.date >= %s
+			GROUP BY s.id, s.domain
+			ORDER BY total_sent DESC",
+			$date_from
+		), ARRAY_A ) ?: [];
+	}
+
+	public static function get_server_detail_breakdown( $server_id, $days = 30 ) {
+		// Used for Accordion Content (Heavy, Lazy Loaded)
+		$cache_key = "pw_stats_server_{$server_id}_{$days}";
+		$cached = get_transient( $cache_key );
+		if ( $cached !== false ) return $cached;
+
+		global $wpdb;
+		$history_table = $wpdb->prefix . 'postal_stats_history';
 		$templates_table = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
-		// 1. Get List of Template Names
-		$template_names = $wpdb->get_col("SELECT name FROM $templates_table");
-
-		// 2. Fetch Aggregated Data
-		// Fallback to legacy if needed (omitted for brevity as we focus on new system, assuming history exists for "professional suite")
-
+		// Aggregation by Template ID (Smart Null Grouping)
 		$results = $wpdb->get_results( $wpdb->prepare(
-			"SELECT 
-				s.domain as server_domain,
-				h.email_from,
+			"SELECT
+				COALESCE(t.name, 'null') as template_name,
 				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as total_sent,
 				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
-				COUNT(DISTINCT CASE WHEN h.event_type = 'delayed' THEN h.message_id END) as delayed_count,
-				COUNT(DISTINCT CASE WHEN h.event_type = 'held' THEN h.message_id END) as held_count,
-				COUNT(DISTINCT CASE WHEN h.event_type IN ('failed', 'bounced') THEN h.message_id END) as error_count,
 				COUNT(DISTINCT CASE WHEN h.event_type = 'opened' THEN h.message_id END) as opened_count,
 				COUNT(DISTINCT CASE WHEN h.event_type = 'clicked' THEN h.message_id END) as clicked_count,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('failed', 'bounced') THEN h.message_id END) as error_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'delayed' THEN h.message_id END) as delayed_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'held' THEN h.message_id END) as held_count,
 				0 as avg_response_time
-			FROM $table_stats h
-			JOIN $servers_table s ON h.server_id = s.id
-			WHERE h.timestamp >= %s AND h.email_from IS NOT NULL
-			GROUP BY s.domain, h.email_from
-			ORDER BY s.domain ASC, total_sent DESC",
+			FROM $history_table h
+			LEFT JOIN $templates_table t ON h.template_id = t.id
+			WHERE h.server_id = %d AND h.timestamp >= %s
+			GROUP BY COALESCE(t.name, 'null')
+			ORDER BY total_sent DESC",
+			$server_id,
 			$date_from
-		), ARRAY_A ) ?: [];
+		), ARRAY_A );
 
-		// 3. Process grouping for "null" (non-template prefixes)
-		$grouped = [];
-		$null_group = [
-			'server_domain' => '', // Will be set if only 1 server, or we might need to handle per-server nulls.
-								   // Requirement: "Regrouper tous les événements sans template dans une seule ligne nommée “null”."
-								   // Usually stats are displayed per server. But the requirement says "une seule ligne".
-								   // Let's assume global "null" row for simplicity, or per-server "null" if the table is per server.
-								   // The current table structure is "Server / Prefix". Grouping all nulls into one "null" row regardless of server?
-								   // "Transformer la section “Performance par Serveur et Préfixe Email (Détail Postal)”... Regrouper ... dans une seule ligne".
-								   // If I group across servers, I lose server context. I will group per server?
-								   // "Regrouper tous les événements sans template dans une seule ligne nommée 'null'".
-								   // Ambiguous. I will group "null" per server to keep the table structure "Server -> Rows".
-			// Actually, let's group globally as "null" at the bottom or top if that's what is implied.
-			// However, usually these stats are useful per server to see reputation.
-			// Let's implement "null" prefix PER SERVER.
-			// Wait, looking at the code, the table iterates servers.
-			// "Si prefix ne correspond à aucun template -> NE PAS afficher la ligne brute."
-			// "Regrouper tous les événements sans template dans une seule ligne nommée “null”."
-		];
-
-		// Let's do per-server null grouping.
-		$per_server_nulls = [];
-
-		foreach ($results as $row) {
-			$prefix = explode('@', $row['email_from'])[0];
-			$domain = $row['server_domain'];
-
-			if (in_array($prefix, $template_names)) {
-				$grouped[] = $row;
-			} else {
-				if (!isset($per_server_nulls[$domain])) {
-					$per_server_nulls[$domain] = [
-						'server_domain' => $domain,
-						'email_from' => 'null', // Display name
-						'total_sent' => 0,
-						'success_count' => 0,
-						'delayed_count' => 0,
-						'held_count' => 0,
-						'error_count' => 0,
-						'opened_count' => 0,
-						'clicked_count' => 0,
-						'avg_response_time' => 0,
-						'response_sum' => 0,
-						'count_avg' => 0
-					];
-				}
-				$per_server_nulls[$domain]['total_sent'] += $row['total_sent'];
-				$per_server_nulls[$domain]['success_count'] += $row['success_count'];
-				$per_server_nulls[$domain]['delayed_count'] += $row['delayed_count'];
-				$per_server_nulls[$domain]['held_count'] += $row['held_count'];
-				$per_server_nulls[$domain]['error_count'] += $row['error_count'];
-				$per_server_nulls[$domain]['opened_count'] += (int)($row['opened_count'] ?? 0);
-				$per_server_nulls[$domain]['clicked_count'] += (int)($row['clicked_count'] ?? 0);
-				$per_server_nulls[$domain]['response_sum'] += ($row['avg_response_time'] * $row['total_sent']);
-				$per_server_nulls[$domain]['count_avg'] += $row['total_sent'];
-			}
-		}
-
-		foreach ($per_server_nulls as $domain => $stats) {
-			if ($stats['count_avg'] > 0) {
-				$stats['avg_response_time'] = $stats['response_sum'] / $stats['count_avg'];
-			}
-			unset($stats['response_sum'], $stats['count_avg']);
-			$grouped[] = $stats;
-		}
-
-		// Sort again to be safe
-		usort($grouped, function($a, $b) {
-			return strcmp($a['server_domain'], $b['server_domain']) ?: ($b['total_sent'] - $a['total_sent']);
-		});
-
-		return $grouped;
+		set_transient( $cache_key, $results, 60 ); // Cache 60s
+		return $results;
 	}
 
 	public static function get_template_performance( $days = 30 ) {

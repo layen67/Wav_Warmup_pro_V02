@@ -52,7 +52,7 @@ class Plugin {
 			'bulk_action_templates', 'export_template', 'import_templates',
 			'save_category', 'delete_category', 'get_categories',
 			'get_suppression_list', 'delete_suppression', 'get_server_health',
-			'get_advanced_stats', 'get_stats_table'
+			'get_advanced_stats', 'get_stats_table', 'get_server_detail'
 		];
 
 		foreach ( $ajax_actions as $action ) {

@@ -365,8 +365,24 @@ class AjaxHandler {
 		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
 
+		// Deprecated for new accordion, but kept if needed for fallback?
+		// Actually, we replace it with get_server_detail as per plan.
+		// But let's add the new one and remove this old call.
+		// Wait, frontend still calls this? I will update frontend.
+
+		wp_send_json_error( [ 'message' => 'Endpoint deprecated. Use pw_get_server_detail.' ] );
+	}
+
+	public function ajax_get_server_detail() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$server_id = (int) $_POST['server_id'];
 		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
-		$stats = Stats::get_server_performance_by_prefix( $days );
+
+		if ( ! $server_id ) wp_send_json_error( [ 'message' => 'Missing server ID' ] );
+
+		$stats = Stats::get_server_detail_breakdown( $server_id, $days );
 
 		wp_send_json_success( [ 'stats' => $stats ] );
 	}
