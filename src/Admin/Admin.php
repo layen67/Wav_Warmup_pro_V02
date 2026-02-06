@@ -63,6 +63,11 @@ class Admin {
 			wp_enqueue_script( 'pw-chartjs', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', [], '4.4.0', true );
 		}
 
+		if ( strpos( $hook, 'postal-warmup-stats' ) !== false ) {
+			wp_enqueue_script( 'pw-jspdf', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', [], '2.5.1', true );
+			wp_enqueue_script( 'pw-html2canvas', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', [], '1.4.1', true );
+		}
+
 		wp_enqueue_script( 'pw-admin', PW_PLUGIN_URL . 'admin/assets/js/admin.js', [ 'jquery', 'pw-chartjs' ], $script_version, true );
 		
 		if ( strpos( $hook, 'postal-warmup-templates' ) !== false || $hook === 'toplevel_page_postal-warmup' ) {

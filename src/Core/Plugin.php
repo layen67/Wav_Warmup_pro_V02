@@ -51,7 +51,8 @@ class Plugin {
 			'get_template_versions', 'restore_template_version', 'reorder_templates',
 			'bulk_action_templates', 'export_template', 'import_templates',
 			'save_category', 'delete_category', 'get_categories',
-			'get_suppression_list', 'delete_suppression', 'get_server_health'
+			'get_suppression_list', 'delete_suppression', 'get_server_health',
+			'get_advanced_stats', 'get_stats_table'
 		];
 
 		foreach ( $ajax_actions as $action ) {

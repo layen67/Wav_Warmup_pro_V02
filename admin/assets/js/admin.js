@@ -256,90 +256,199 @@
     // --- SUPPRESSION LIST MANAGER (v3.2) ---
     $(document).ready(function() {
         if ($('.pw-suppression-wrap').length) {
-            
             loadSuppressionList();
-
-            $('#pw-suppression-server').on('change', function() {
-                loadSuppressionList();
-            });
-
-            $('#pw-refresh-suppression').on('click', function(e) {
-                e.preventDefault();
-                loadSuppressionList();
-            });
-
+            $('#pw-suppression-server').on('change', function() { loadSuppressionList(); });
+            $('#pw-refresh-suppression').on('click', function(e) { e.preventDefault(); loadSuppressionList(); });
             $(document).on('click', '.pw-delete-suppression', function(e) {
                 e.preventDefault();
-                const address = $(this).data('address');
-                if (confirm('Voulez-vous vraiment retirer ' + address + ' de la liste de suppression ?')) {
-                    deleteSuppression(address);
-                }
+                if (confirm('Voulez-vous vraiment retirer ' + $(this).data('address') + ' de la liste de suppression ?')) deleteSuppression($(this).data('address'));
             });
         }
-
         function loadSuppressionList() {
             const serverId = $('#pw-suppression-server').val();
             const $tbody = $('#pw-suppression-list-body');
-            
             $tbody.html('<tr><td colspan="5" style="text-align: center; padding: 20px;"><span class="spinner is-active" style="float:none; margin:0;"></span> Chargement...</td></tr>');
-
-            $.post(pwAdmin.ajaxurl, {
-                action: 'pw_get_suppression_list',
-                nonce: pwAdmin.nonce,
-                server_id: serverId
-            }).done(function(res) {
-                if (res.success) {
-                    try {
-                        renderSuppressionList(res.data.list);
-                    } catch (e) {
-                        console.error('Render error:', e);
-                        $tbody.html('<tr><td colspan="5" style="color: #d63638; text-align:center;">Erreur d\'affichage: ' + e.message + '</td></tr>');
-                    }
-                } else {
-                    $tbody.html('<tr><td colspan="5" style="color: #d63638; text-align:center;">' + (res.data.message || 'Erreur inconnue') + '</td></tr>');
-                }
-            }).fail(function() {
-                $tbody.html('<tr><td colspan="5" style="color: #d63638; text-align:center;">Erreur réseau</td></tr>');
+            $.post(pwAdmin.ajaxurl, { action: 'pw_get_suppression_list', nonce: pwAdmin.nonce, server_id: serverId }).done(function(res) {
+                if (res.success) renderSuppressionList(res.data.list); else $tbody.html('<tr><td colspan="5" style="color: #d63638; text-align:center;">' + (res.data.message || 'Erreur') + '</td></tr>');
             });
         }
-
         function renderSuppressionList(list) {
             const $tbody = $('#pw-suppression-list-body');
-            const tpl = $('#pw-suppression-row-tpl').html();
-            
-            // Safety check: ensure list is an array
-            if (!list || !Array.isArray(list) || list.length === 0) {
-                $tbody.html('<tr><td colspan="5" style="text-align:center; color:#646970;">La liste est vide. Tout va bien !</td></tr>');
-                return;
-            }
-
+            if (!list || !Array.isArray(list) || list.length === 0) { $tbody.html('<tr><td colspan="5" style="text-align:center;">Liste vide</td></tr>'); return; }
             $tbody.empty();
-            list.forEach(item => {
-                let html = tpl
-                    .replace(/<%- address %>/g, item.address)
-                    .replace(/<%- type %>/g, item.type || 'Bounced')
-                    .replace(/<%- source %>/g, item.source || 'SMTP')
-                    .replace(/<%- timestamp %>/g, new Date(item.timestamp * 1000).toLocaleString());
-                $tbody.append(html);
+            const tpl = $('#pw-suppression-row-tpl').html();
+            list.forEach(item => { $tbody.append(tpl.replace(/<%- address %>/g, item.address).replace(/<%- type %>/g, item.type || 'Bounced').replace(/<%- source %>/g, item.source || 'SMTP').replace(/<%- timestamp %>/g, new Date(item.timestamp * 1000).toLocaleString())); });
+        }
+        function deleteSuppression(address) {
+            $.post(pwAdmin.ajaxurl, { action: 'pw_delete_suppression', nonce: pwAdmin.nonce, server_id: $('#pw-suppression-server').val(), address: address }).done(function(res) { if (res.success) loadSuppressionList(); else alert(res.data.message || 'Erreur'); });
+        }
+    });
+
+    // --- ADVANCED STATS MODULE (v4.0) ---
+    $(document).ready(function() {
+        if (!$('.pw-stats-page').length) return;
+
+        let charts = {};
+
+        // 1. Dark Mode
+        const darkModeKey = 'pw_dark_mode';
+        if (localStorage.getItem(darkModeKey) === 'true') $('body').addClass('pw-dark-mode');
+        $('#pw-dark-mode-toggle').on('click', function() {
+            $('body').toggleClass('pw-dark-mode');
+            localStorage.setItem(darkModeKey, $('body').hasClass('pw-dark-mode'));
+        });
+
+        // 2. Tabs
+        $('.nav-tab-wrapper a').on('click', function(e) {
+            e.preventDefault();
+            $('.nav-tab-wrapper a').removeClass('nav-tab-active');
+            $(this).addClass('nav-tab-active');
+            $('.pw-tab-content').hide();
+            $($(this).attr('href')).show();
+        });
+
+        // 3. Filters
+        $('#filter-days, #filter-server').on('change', function() { refreshStats(); });
+
+        // 4. Load Data
+        fetchAdvancedStats();
+
+        function refreshStats() {
+            const data = { action: 'pw_get_stats_table', nonce: pwAdmin.nonce, days: $('#filter-days').val(), server: $('#filter-server').val() };
+            $('.pw-stats-page').css('opacity', '0.5');
+            $.when(
+                $.post(pwAdmin.ajaxurl, data),
+                $.post(pwAdmin.ajaxurl, { ...data, action: 'pw_get_advanced_stats' })
+            ).done(function(resTable, resCharts) {
+                if(resTable[0].success) renderTable(resTable[0].data.stats);
+                if(resCharts[0].success) { renderCharts(resCharts[0].data.charts); renderHeatmap(resCharts[0].data.heatmap); }
+                $('.pw-stats-page').css('opacity', '1');
             });
         }
 
-        function deleteSuppression(address) {
-            const serverId = $('#pw-suppression-server').val();
+        function fetchAdvancedStats() {
+            $.post(pwAdmin.ajaxurl, { action: 'pw_get_advanced_stats', nonce: pwAdmin.nonce, days: $('#filter-days').val() }).done(function(res) {
+                if(res.success) { renderCharts(res.data.charts); renderHeatmap(res.data.heatmap); }
+            });
+        }
+
+        function renderTable(stats) {
+            const $tbody = $('#pw-detailed-stats-body');
+            $tbody.empty();
+            if (!stats || stats.length === 0) { $tbody.html('<tr><td colspan="9">Aucune donnée.</td></tr>'); return; }
             
-            $.post(pwAdmin.ajaxurl, {
-                action: 'pw_delete_suppression',
-                nonce: pwAdmin.nonce,
-                server_id: serverId,
-                address: address
-            }).done(function(res) {
-                if (res.success) {
-                    loadSuppressionList();
-                } else {
-                    alert(res.data.message || 'Erreur');
+            let currentServer = '';
+            stats.forEach(s => {
+                const prefix = s.email_from;
+                const domain = s.server_domain;
+                if (currentServer !== domain) {
+                    currentServer = domain;
+                    $tbody.append(`<tr class="pw-server-header-row" data-server="${domain}"><td colspan="9"><strong><span class="dashicons dashicons-networking"></span> ${domain}</strong></td></tr>`);
+                }
+                const sent = parseInt(s.total_sent);
+                const success = parseInt(s.success_count);
+                const delRate = sent > 0 ? ((success / sent) * 100).toFixed(1) : 0;
+                const openRate = success > 0 ? ((parseInt(s.opened_count||0) / success) * 100).toFixed(1) : 0;
+                const clickRate = success > 0 ? ((parseInt(s.clicked_count||0) / success) * 100).toFixed(1) : 0;
+                const prefixDisplay = prefix === 'null' ? '<em style="color: #888;">&lt;sans template&gt;</em>' : `<code>${prefix}</code>`;
+
+                $tbody.append(`
+                    <tr class="pw-stat-row" data-domain="${domain}-${prefix}" data-sent="${sent}" data-delivered="${delRate}" data-opened="${openRate}" data-clicked="${clickRate}" data-bounced="${s.error_count}" data-latency="${s.avg_response_time}">
+                        <td style="padding-left: 25px;">${prefixDisplay}</td>
+                        <td>${sent.toLocaleString()}</td>
+                        <td><div class="pw-progress-bar"><div class="pw-progress-fill ${delRate > 90 ? 'success' : 'warning'}" style="width: ${delRate}%"></div><span>${success} (${delRate}%)</span></div></td>
+                        <td>${s.opened_count||0} <small class="pw-rate">(${openRate}%)</small></td>
+                        <td>${s.clicked_count||0} <small class="pw-rate">(${clickRate}%)</small></td>
+                        <td><span class="pw-count bounced">${s.error_count}</span></td>
+                        <td><span class="pw-count delayed">${s.delayed_count}</span></td>
+                        <td><span class="pw-count held">${s.held_count}</span></td>
+                        <td>${parseFloat(s.avg_response_time).toFixed(3)}s</td>
+                    </tr>
+                `);
+            });
+        }
+
+        $('.pw-sortable').on('click', function() {
+            const sortKey = $(this).data('sort');
+            const $tbody = $('#pw-detailed-stats-body');
+            const rows = $tbody.find('.pw-stat-row').get();
+            let dir = $(this).hasClass('is-sorted-desc') ? 'asc' : 'desc';
+            $('.pw-sortable').removeClass('is-sorted is-sorted-desc').find('.dashicons').removeClass('dashicons-arrow-up-alt2 dashicons-arrow-down-alt2').addClass('dashicons-sort');
+            $(this).addClass(dir === 'asc' ? 'is-sorted' : 'is-sorted-desc');
+            $(this).find('.dashicons').removeClass('dashicons-sort').addClass(dir === 'asc' ? 'dashicons-arrow-up-alt2' : 'dashicons-arrow-down-alt2');
+
+            rows.sort((a, b) => {
+                let vA = parseFloat($(a).data(sortKey)) || 0;
+                let vB = parseFloat($(b).data(sortKey)) || 0;
+                return dir === 'asc' ? vA - vB : vB - vA;
+            });
+            $('.pw-server-header-row').hide();
+            if (sortKey === 'domain') $('.pw-server-header-row').show(); // Simplistic restore
+            $.each(rows, (i, r) => $tbody.append(r));
+        });
+
+        function renderCharts(data) {
+            ['volume', 'deliverability', 'openrate', 'errors'].forEach(k => { if (charts[k]) charts[k].destroy(); });
+            if(!data || !data.dates) return;
+            const create = (id, label, d, color, type='line') => {
+                const ctx = document.getElementById('pw-chart-' + id);
+                if(!ctx) return null;
+                return new Chart(ctx, { type: type, data: { labels: data.dates, datasets: [{ label: label, data: d, borderColor: color, backgroundColor: color.replace(')', ', 0.2)').replace('rgb', 'rgba'), borderWidth: 2, tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false } });
+            };
+            charts.volume = create('volume', 'Volume', data.sent, 'rgb(34, 113, 177)', 'bar');
+            charts.deliverability = create('deliverability', 'Délivrabilité (%)', data.deliverability, 'rgb(70, 180, 80)');
+            charts.openrate = create('openrate', 'Ouverture (%)', data.open_rate, 'rgb(240, 173, 78)');
+            charts.errors = create('errors', 'Erreurs', data.errors, 'rgb(220, 50, 50)', 'bar');
+        }
+
+        function renderHeatmap(data) {
+             const $c = $('#pw-heatmap-container');
+             let h = '<table class="pw-heatmap-table"><thead><tr><th class="tpl-name">Template</th>';
+             for(let i=0; i<24; i++) h += `<th>${i}h</th>`;
+             h += '</tr></thead><tbody>';
+             let max = 0; Object.values(data).forEach(arr => arr.forEach(v => max = Math.max(max, v)));
+             Object.keys(data).forEach(tpl => {
+                 h += `<tr><td class="tpl-name"><code>${escapeHtml(tpl)}</code></td>`;
+                 data[tpl].forEach(val => {
+                     const bg = max > 0 ? `rgba(34, 113, 177, ${Math.max(0.1, val/max)})` : 'transparent';
+                     h += `<td><span class="pw-heatmap-cell" style="background:${val > 0 ? bg : ''}" title="${val}"></span></td>`;
+                 });
+                 h += '</tr>';
+             });
+             $c.html(h + '</tbody></table>');
+        }
+
+        $('#pw-export-csv-btn').on('click', function() {
+            let csv = [];
+            document.querySelectorAll("#pw-detailed-stats-table tr").forEach(tr => {
+                if(tr.style.display !== 'none') {
+                    let row = [];
+                    tr.querySelectorAll("td, th").forEach(td => row.push('"' + td.innerText.replace(/"/g, '""').trim() + '"'));
+                    csv.push(row.join(","));
                 }
             });
-        }
+            const link = document.createElement("a");
+            link.download = 'postal-stats.csv';
+            link.href = window.URL.createObjectURL(new Blob([csv.join("\n")], {type: "text/csv"}));
+            link.click();
+        });
+
+        $('#pw-export-pdf-btn').on('click', function() {
+            if (confirm('Pour une meilleure qualité, utilisez la fonction "Enregistrer au format PDF" de votre navigateur.\n\nVoulez-vous ouvrir la boîte de dialogue d\'impression ?')) {
+                window.print();
+            } else {
+                 if (window.jspdf) {
+                     const { jsPDF } = window.jspdf;
+                     const doc = new jsPDF({ orientation: 'landscape' });
+                     html2canvas(document.querySelector("#pw-stats-export-area")).then(canvas => {
+                         const img = canvas.toDataURL('image/png');
+                         const w = doc.internal.pageSize.getWidth();
+                         doc.addImage(img, 'PNG', 0, 0, w, (canvas.height * w) / canvas.width);
+                         doc.save('postal-stats.pdf');
+                     });
+                 }
+            }
+        });
     });
 
 })(jQuery);

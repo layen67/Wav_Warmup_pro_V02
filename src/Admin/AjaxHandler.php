@@ -348,4 +348,26 @@ class AjaxHandler {
 			wp_send_json_success( [ 'status' => 'ok', 'latency' => $duration, 'message' => 'Connected' ] );
 		}
 	}
+
+	public function ajax_get_advanced_stats() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
+
+		$charts = Stats::get_advanced_charts_data( $days );
+		$heatmap = Stats::get_heatmap_data( $days );
+
+		wp_send_json_success( [ 'charts' => $charts, 'heatmap' => $heatmap ] );
+	}
+
+	public function ajax_get_stats_table() {
+		check_ajax_referer( 'pw_admin_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( [ 'message' => 'Forbidden' ] );
+
+		$days = isset( $_POST['days'] ) ? (int) $_POST['days'] : 30;
+		$stats = Stats::get_server_performance_by_prefix( $days );
+
+		wp_send_json_success( [ 'stats' => $stats ] );
+	}
 }
