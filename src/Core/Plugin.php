@@ -3,6 +3,7 @@
 namespace PostalWarmup\Core;
 
 use PostalWarmup\Admin\Admin;
+use PostalWarmup\Admin\AjaxHandler;
 use PostalWarmup\Admin\Settings;
 use PostalWarmup\API\WebhookHandler;
 use PostalWarmup\API\Sender;
@@ -33,6 +34,7 @@ class Plugin {
 	private function define_admin_hooks() {
 		$plugin_admin = new Admin( $this->version );
 		$plugin_settings = new Settings();
+		$ajax_handler = new AjaxHandler();
 
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
@@ -40,20 +42,21 @@ class Plugin {
 		$this->loader->add_action( 'admin_init', $plugin_settings, 'register_settings' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'display_admin_notices' );
 
-		// Register all AJAX hooks via the Admin class map
+		// Register all AJAX hooks via the AjaxHandler
 		$ajax_actions = [
-			'test_server', 'regenerate_secret', 'get_stats', 'get_latest_activity',
+			'test_server', 'regenerate_secret', 'get_dashboard_data',
 			'clear_logs', 'clear_cache', 'export_stats', 'get_all_templates',
-			'save_template', 'toggle_favorite', 'get_template', 'delete_template',
+			'save_template', 'toggle_favorite', 'get_template', 'get_template_stats', 'delete_template',
 			'duplicate_template', 'move_template', 'update_template_status',
 			'get_template_versions', 'restore_template_version', 'reorder_templates',
 			'bulk_action_templates', 'export_template', 'import_templates',
 			'save_category', 'delete_category', 'get_categories',
-			'get_suppression_list', 'delete_suppression', 'get_server_health'
+			'get_suppression_list', 'delete_suppression', 'get_server_health',
+			'get_advanced_stats', 'get_stats_table', 'get_server_detail'
 		];
 
 		foreach ( $ajax_actions as $action ) {
-			$this->loader->add_action( 'wp_ajax_pw_' . $action, $plugin_admin, 'ajax_' . $action );
+			$this->loader->add_action( 'wp_ajax_pw_' . $action, $ajax_handler, 'ajax_' . $action );
 		}
 	}
 
@@ -97,6 +100,11 @@ class Plugin {
 		$this->loader->add_action( 'pw_daily_report', 'PostalWarmup\Services\EmailNotifications', 'send_daily_report' );
 		$this->loader->add_action( 'pw_cleanup_old_stats', 'PostalWarmup\Models\Stats', 'cleanup_old_stats' );
 		$this->loader->add_action( 'pw_daily_stats_aggregation', 'PostalWarmup\Models\Stats', 'aggregate_daily_stats' );
+
+		// Self-healing: Ensure daily report is scheduled if missing (Fix for existing installations)
+		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
+			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
+		}
 	}
 
 	public function run() {

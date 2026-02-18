@@ -78,7 +78,9 @@ class Activator {
 			KEY idx_server_id (server_id),
 			KEY idx_level (level),
 			KEY idx_created_at (created_at),
-			KEY idx_status (status)
+			KEY idx_status (status),
+			KEY idx_template_created (template_used, created_at),
+			KEY idx_server_created (server_id, created_at)
 		) $charset_collate;";
 		dbDelta( $sql_logs );
 
@@ -229,6 +231,29 @@ class Activator {
 			KEY idx_date (date)
 		) $charset_collate;";
 		dbDelta( $sql_daily );
+
+		// 12. Permanent Stats History (New Architecture)
+		$table_stats_history = $wpdb->prefix . 'postal_stats_history';
+		$sql_stats_history = "CREATE TABLE $table_stats_history (
+			id bigint NOT NULL AUTO_INCREMENT,
+			server_id int NOT NULL,
+			template_id bigint DEFAULT NULL,
+			message_id varchar(255) DEFAULT NULL,
+			email_from varchar(255) DEFAULT NULL,
+			event_type varchar(50) NOT NULL,
+			timestamp datetime NOT NULL,
+			meta longtext DEFAULT NULL,
+			created_at datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+			PRIMARY KEY  (id),
+			KEY idx_server_id (server_id),
+			KEY idx_template_id (template_id),
+			KEY idx_message_id (message_id),
+			KEY idx_email_from (email_from),
+			KEY idx_event_type (event_type),
+			KEY idx_timestamp (timestamp),
+			KEY idx_composite_stats (server_id, template_id, event_type, timestamp)
+		) $charset_collate;";
+		dbDelta( $sql_stats_history );
 	}
 
 	private static function set_default_options() {
@@ -255,6 +280,9 @@ class Activator {
 		}
 		if ( ! wp_next_scheduled( 'pw_daily_stats_aggregation' ) ) {
 			wp_schedule_event( time(), 'daily', 'pw_daily_stats_aggregation' );
+		}
+		if ( ! wp_next_scheduled( 'pw_daily_report' ) ) {
+			wp_schedule_event( time(), 'daily', 'pw_daily_report' );
 		}
 	}
 }

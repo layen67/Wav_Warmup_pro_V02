@@ -4,7 +4,7 @@ namespace PostalWarmup\API;
 
 use PostalWarmup\Models\Database;
 use PostalWarmup\Services\Logger;
-use PostalWarmup\Admin\TemplateManager;
+use PostalWarmup\Core\TemplateEngine;
 
 /**
  * Classe d'envoi des emails via Postal
@@ -69,47 +69,59 @@ class Sender {
 			return [ 'error' => 'Serveur introuvable' ];
 		}
 
+		// Use TemplateEngine to prepare everything
+		$prepared = TemplateEngine::prepare_template( $prefix, $domain, $prefix, $to );
+		$template_name = $prepared['name'];
 		$from_email = $prefix . '@' . $domain;
-		
+
 		Logger::info( "Worker: Traitement envoi email", [
 			'server_id'  => $server['id'],
 			'email_from' => $from_email,
 			'email_to'   => $to,
-			'retry'      => $retry_count
+			'retry'      => $retry_count,
+			'template'   => $template_name
 		]);
-		
-		// Charger le template (using TemplateManager in src/Admin/TemplateManager but logic needs to be accessible in frontend/worker too? 
-		// Actually existing PW_Template_Loader was used. We should probably port PW_Template_Loader logic or use TemplateManager if it has loading logic.
-		// For now, let's assume we use TemplateManager::get_template() which wraps the loading logic.
-		// Wait, TemplateManager::get_template() calls PW_Template_Loader::load(). I need to make sure I have a way to load templates.
-		// I'll use the existing PW_Template_Loader logic, but I haven't ported it yet. 
-		// I should probably have put Template logic in Models or Services. 
-		// I will use `PostalWarmup\Admin\TemplateManager` for now as I will put the logic there or in `PostalWarmup\Services\TemplateLoader`. 
-		// I will create `PostalWarmup\Services\TemplateLoader` to separate concerns properly, but user plan didn't explicitly list it. 
-		// I will assume `PostalWarmup\Admin\TemplateManager` handles it for now as per my plan, OR I can add `Services\TemplateLoader` quickly. 
-		// Let's use `PostalWarmup\Admin\TemplateManager` but actually I need the loading logic which was in `includes/class-pw-template-loader.php`.
-		// I will check `admin/class-pw-template-manager.php` content again... it calls `PW_Template_Loader`.
-		// I need to implement `PostalWarmup\Services\TemplateLoader`. I will add it to the implementation.
-		
-		$template = \PostalWarmup\Services\TemplateLoader::load( $prefix, $domain );
-		
-		// Fallback to 'null' template if specific template not found (Original behavior)
-		if ( ! $template ) {
-			$template = \PostalWarmup\Services\TemplateLoader::load( 'null', $domain );
+
+		$payload = [
+			'to'         => [ $to ],
+			'from'       => "{$prepared['from_name']} <$from_email>",
+			'subject'    => $prepared['subject'],
+			'plain_body' => $prepared['text'],
+			'html_body'  => $prepared['html'],
+			'headers'    => [
+				'X-Warmup-Source'   => 'PostalWarmupPro-v' . PW_VERSION,
+				'X-Warmup-Template' => $template_name
+			]
+		];
+
+		if ( ! empty( $prepared['reply_to'] ) ) {
+			$payload['reply_to'] = $prepared['reply_to'];
 		}
 
-		// Ultimate fallback if 'null' template is also missing
-		if ( ! $template ) {
-			$template = \PostalWarmup\Services\TemplateLoader::get_fallback();
-			Logger::warning( "Worker: Template introuvable ($prefix) et template 'null' absent. Utilisation du fallback système." );
+		$global_tag = get_option( 'pw_global_tag', 'warmup' );
+		if ( ! empty( $global_tag ) ) {
+			$payload['tag'] = sanitize_text_field( $global_tag );
 		}
-		
-		$payload = self::build_payload( $to, $from_email, $template, $domain, $prefix );
-		$result = self::send_request( $server, $payload, $retry_count + 1 );
+
+		$payload = apply_filters( 'pw_email_payload', $payload, $prepared, [] );
+
+		$result = self::send_request( $server, $payload, $retry_count + 1, $template_name );
 		
 		$response_time = isset( $result['response_time'] ) ? $result['response_time'] : 0;
 
 		if ( $result['success'] ) {
+			// New Stats Logic: Insert into History
+			$message_id = $result['response']['data']['message_id'] ?? null;
+			Database::insert_stat_history( [
+				'server_id'   => $server['id'],
+				'template_id' => $prepared['id'], // Can be null if file/system
+				'message_id'  => $message_id,
+				'email_from'  => $from_email,
+				'event_type'  => 'sent',
+				'timestamp'   => current_time( 'mysql' ),
+				'meta'        => json_encode( [ 'template_name' => $template_name ] )
+			] );
+
 			Database::increment_sent( $domain, true, $response_time );
 			Database::record_stat( $server['id'], true, $response_time );
 			return $result;
@@ -129,59 +141,23 @@ class Sender {
 					array( $to, $domain, $prefix, $server_id, $retry_count + 1 ),
 					'postal-warmup'
 				);
-				Logger::warning( "Worker: Échec envoi, replanifié dans {$delay}s", [ 'error' => $result['error'] ] );
+				Logger::warning( "Worker: Échec envoi, replanifié dans {$delay}s", [
+					'error'    => $result['error'],
+					'template' => $template_name
+				] );
 			}
 		} else {
-			Logger::error( "Worker: Abandon après $max_retries tentatives", [ 'error' => $result['error'] ] );
+			Logger::error( "Worker: Abandon après $max_retries tentatives", [
+				'error'    => $result['error'],
+				'template' => $template_name
+			] );
 		}
 		
 		return $result;
 	}
 
-	private static function build_payload( $to, $from_email, $template, $domain, $prefix ) {
-		// Use TemplateLoader for placeholders and picking random
-		$subject   = \PostalWarmup\Services\TemplateLoader::pick_random( $template['subject'] );
-		$text      = \PostalWarmup\Services\TemplateLoader::pick_random( $template['text'] );
-		$html      = \PostalWarmup\Services\TemplateLoader::pick_random( $template['html'] );
-		$from_name = \PostalWarmup\Services\TemplateLoader::pick_random( $template['from_name'] );
-		
-		$vars = [
-			'email'  => $to,
-			'domain' => $domain,
-			'local'  => $prefix,
-			'date'   => current_time( 'd/m/Y' ),
-			'time'   => current_time( 'H:i' ),
-		];
-		
-		$subject = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $subject, $vars );
-		$text    = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $text, $vars );
-		$html    = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $html, $vars );
-		
-		$payload = [
-			'to'         => [ $to ],
-			'from'       => "$from_name <$from_email>",
-			'subject'    => $subject,
-			'plain_body' => $text,
-			'html_body'  => $html,
-			'headers'    => [ 'X-Warmup-Source' => 'PostalWarmupPro-v' . PW_VERSION ]
-		];
 
-		$global_tag = get_option( 'pw_global_tag', 'warmup' );
-		if ( ! empty( $global_tag ) ) {
-			$payload['tag'] = sanitize_text_field( $global_tag );
-		}
-
-		if ( ! empty( $template['reply_to'] ) ) {
-			$reply_to = \PostalWarmup\Services\TemplateLoader::pick_random( $template['reply_to'] );
-			if ( ! empty( $reply_to ) ) {
-				$payload['reply_to'] = \PostalWarmup\Services\TemplateLoader::apply_placeholders( $reply_to, $vars );
-			}
-		}
-
-		return apply_filters( 'pw_email_payload', $payload, $template, $vars );
-	}
-
-	private static function send_request( $server, $payload, $attempt ) {
+	private static function send_request( $server, $payload, $attempt, $template_name = null ) {
 		$api_url = rtrim( $server['api_url'], '/' );
 		$api_key = $server['api_key']; // Already decrypted by Database model
 		$url = $api_url . '/send/message';
@@ -219,7 +195,20 @@ class Sender {
 		]);
 		
 		if ( $http_code !== 200 ) {
-			return [ 'success' => false, 'error' => "HTTP $http_code", 'response_time' => $response_time ];
+			$error_msg = "HTTP $http_code";
+			$json = json_decode( $body, true );
+			if ( $json && isset( $json['data']['message'] ) ) {
+				$error_msg .= ' - ' . $json['data']['message'];
+			} elseif ( $json && isset( $json['message'] ) ) {
+				$error_msg .= ' - ' . $json['message'];
+			}
+
+			Logger::error( "Erreur API Postal ($http_code)", [
+				'server_id' => $server['id'],
+				'response'  => $body
+			]);
+
+			return [ 'success' => false, 'error' => $error_msg, 'response_time' => $response_time ];
 		}
 		
 		$data = json_decode( $body, true );
@@ -227,14 +216,26 @@ class Sender {
 			return [ 'success' => false, 'error' => $data['message'] ?? 'Réponse API invalide', 'response_time' => $response_time ];
 		}
 		
+		$message_id = $data['data']['message_id'] ?? null;
+
 		Logger::info( "Email envoyé avec succès", [
 			'server_id'     => $server['id'],
 			'email_to'      => $payload['to'][0] ?? '',
-			'message_id'    => $data['data']['message_id'] ?? null,
+			'message_id'    => $message_id,
 			'response_time' => round( $response_time, 3 ),
-			'status'        => 'success'
+			'status'        => 'success',
+			'template'      => $template_name
 		]);
 		
+		// Optimization: Pre-fill postal_stats to ensure real-time accuracy even before Webhook
+		if ( $message_id ) {
+			// This part is handled by Logger::log -> Database::insert_log if configured for DB
+			// But for strict stats accuracy, we ensure 'sent' metric is recorded immediately
+			// Already done by Database::increment_sent and record_stat in process_queue,
+			// but we can add message_id tracking if we had a detailed message table.
+			// Current structure relies on aggregated stats.
+		}
+
 		return [ 'success' => true, 'response' => $data, 'response_time' => $response_time ];
 	}
 

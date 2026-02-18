@@ -207,11 +207,95 @@ if (!defined('ABSPATH')) exit;
 </div>
 
 <script type="text/template" id="pw-variant-item-template">
-    <div class="pw-variant-item">
-        <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
+    <div class="pw-variant-item" data-type="<%- type %>">
+        <div class="pw-variant-toolbar">
+            <div class="pw-toolbar-group">
+                <button type="button" class="pw-toggle-btn active" data-mode="code">Code</button>
+                <button type="button" class="pw-toggle-btn" data-mode="preview">Preview</button>
+            </div>
+            <div class="pw-toolbar-group">
+                <button type="button" class="pw-base64-btn" title="Encoder le contenu en Base64">Convertir en Base64</button>
+                <button type="button" class="pw-base64-decode-btn" title="Décoder le contenu Base64">Décoder Base64</button>
+            </div>
+        </div>
+        <div class="pw-variant-editor">
+            <textarea name="variants[<%- type %>][]" class="pw-variant-input"><%- value %></textarea>
+            <div class="pw-variant-preview" style="display:none;"></div>
+        </div>
         <button type="button" class="pw-remove-variant">&times;</button>
     </div>
 </script>
+
+<style>
+.pw-variant-item {
+    position: relative;
+    margin-bottom: 10px;
+}
+.pw-variant-toolbar {
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.pw-toolbar-group {
+    display: flex;
+}
+.pw-toggle-btn {
+    padding: 3px 10px;
+    background: #f0f0f1;
+    border: 1px solid #c3c4c7;
+    cursor: pointer;
+    font-size: 11px;
+}
+.pw-toggle-btn:first-child { border-radius: 3px 0 0 3px; border-right: none; }
+.pw-toggle-btn:last-child { border-radius: 0 3px 3px 0; }
+.pw-toggle-btn.active {
+    background: #fff;
+    border-bottom-color: #fff;
+    font-weight: 600;
+}
+.pw-base64-btn {
+    padding: 3px 10px;
+    font-size: 10px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #2271b1;
+}
+.pw-base64-btn:hover {
+    border-color: #2271b1;
+}
+.pw-base64-decode-btn {
+    padding: 3px 10px;
+    font-size: 10px;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    color: #4f46e5;
+    margin-left: 5px;
+}
+.pw-base64-decode-btn:hover {
+    border-color: #4f46e5;
+}
+.pw-variant-preview {
+    border: 1px solid #c3c4c7;
+    padding: 10px;
+    background: #fff;
+    min-height: 40px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.pw-variant-item[data-type="html"] .pw-variant-preview {
+    font-family: initial;
+    white-space: normal;
+    word-break: normal;
+}
+</style>
 
 <style>
 .pw-header-btns {

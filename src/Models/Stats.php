@@ -67,7 +67,7 @@ class Stats {
 			'evolution'      => $evolution
 		];
 
-		set_transient( 'pw_dashboard_stats', $results, 5 * MINUTE_IN_SECONDS );
+		set_transient( 'pw_dashboard_stats', $results, 1 * MINUTE_IN_SECONDS );
 		return $results;
 	}
 
@@ -226,39 +226,141 @@ class Stats {
 
 	public static function get_top_templates( $days = 7, $limit = 10 ) {
 		global $wpdb;
-		$logs_table = $wpdb->prefix . 'postal_logs';
+		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
+
+		// Fallback to legacy logs if history is empty
+		$count = $wpdb->get_var("SELECT COUNT(*) FROM $table_stats");
+		if ($count == 0) {
+			$logs_table = $wpdb->prefix . 'postal_logs';
+			return $wpdb->get_results( $wpdb->prepare(
+				"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
+				FROM $logs_table
+				WHERE template_used IS NOT NULL
+				AND created_at >= %s
+				AND message != 'Worker: Traitement envoi email'
+				GROUP BY template_used ORDER BY usage_count DESC LIMIT %d",
+				$date_from, $limit
+			), ARRAY_A ) ?: [];
+		}
+
 		return $wpdb->get_results( $wpdb->prepare(
-			"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
-			FROM $logs_table WHERE template_used IS NOT NULL AND created_at >= %s
-			GROUP BY template_used ORDER BY usage_count DESC LIMIT %d",
+			"SELECT
+				t.name as template_used,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as usage_count,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
+				0 as avg_response_time
+			FROM $table_stats h
+			JOIN $table_tpl t ON h.template_id = t.id
+			WHERE h.timestamp >= %s
+			GROUP BY t.name
+			ORDER BY usage_count DESC
+			LIMIT %d",
 			$date_from, $limit
 		), ARRAY_A ) ?: [];
 	}
 
-	public static function get_server_performance_by_prefix( $days = 30 ) {
+	public static function get_all_templates_summary( $days = 30 ) {
 		global $wpdb;
-		$logs_table = $wpdb->prefix . 'postal_logs';
-		$servers_table = $wpdb->prefix . 'postal_servers';
+		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
 		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
 
+		// Fallback to legacy Logs if History is empty (during migration/transition)
+		$count = $wpdb->get_var("SELECT COUNT(*) FROM $table_stats");
+		if ($count == 0) {
+			$logs_table = $wpdb->prefix . 'postal_logs';
+			$results = $wpdb->get_results( $wpdb->prepare(
+				"SELECT template_used, COUNT(*) as usage_count, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count, AVG(response_time) as avg_response_time
+				FROM $logs_table
+				WHERE template_used IS NOT NULL
+				AND created_at >= %s
+				AND message != 'Worker: Traitement envoi email'
+				GROUP BY template_used",
+				$date_from
+			), ARRAY_A ) ?: [];
+		} else {
+			// Use New History Table
+			$results = $wpdb->get_results( $wpdb->prepare(
+				"SELECT
+					t.name as template_used,
+					COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as usage_count,
+					COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
+					0 as avg_response_time
+				FROM $table_stats h
+				LEFT JOIN $table_tpl t ON h.template_id = t.id
+				WHERE h.timestamp >= %s
+				GROUP BY t.name",
+				$date_from
+			), ARRAY_A ) ?: [];
+		}
+
+		$stats = [];
+		foreach ( $results as $row ) {
+			if (!empty($row['template_used'])) {
+				$stats[$row['template_used']] = $row;
+			}
+		}
+		return $stats;
+	}
+
+	public static function get_server_stats_summary_filtered( $days = 30 ) {
+		// Used for Accordion Headers (Lightweight)
+		global $wpdb;
+		$stats_table = $wpdb->prefix . 'postal_stats';
+		$servers_table = $wpdb->prefix . 'postal_servers';
+		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
+
 		return $wpdb->get_results( $wpdb->prepare(
-			"SELECT 
-				s.domain as server_domain,
-				l.email_from,
-				COUNT(*) as total_sent,
-				SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) as success_count,
-				SUM(CASE WHEN l.status = 'delayed' THEN 1 ELSE 0 END) as delayed_count,
-				SUM(CASE WHEN l.status = 'held' THEN 1 ELSE 0 END) as held_count,
-				SUM(CASE WHEN l.status NOT IN ('success', 'delayed', 'held') THEN 1 ELSE 0 END) as error_count,
-				AVG(l.response_time) as avg_response_time
-			FROM $logs_table l
-			JOIN $servers_table s ON l.server_id = s.id
-			WHERE l.created_at >= %s AND l.email_from IS NOT NULL
-			GROUP BY s.domain, l.email_from
-			ORDER BY s.domain ASC, total_sent DESC",
+			"SELECT
+				s.id,
+				s.domain,
+				SUM(st.sent_count) as total_sent,
+				SUM(st.success_count) as total_success,
+				SUM(st.error_count) as total_errors
+			FROM $servers_table s
+			LEFT JOIN $stats_table st ON s.id = st.server_id AND st.date >= %s
+			GROUP BY s.id, s.domain
+			ORDER BY total_sent DESC",
 			$date_from
 		), ARRAY_A ) ?: [];
+	}
+
+	public static function get_server_detail_breakdown( $server_id, $days = 30 ) {
+		// Used for Accordion Content (Heavy, Lazy Loaded)
+		$cache_key = "pw_stats_server_{$server_id}_{$days}";
+		$cached = get_transient( $cache_key );
+		if ( $cached !== false ) return $cached;
+
+		global $wpdb;
+		$history_table = $wpdb->prefix . 'postal_stats_history';
+		$templates_table = $wpdb->prefix . 'postal_templates';
+		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
+
+		// Aggregation by Template ID (Smart Null Grouping)
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT
+				COALESCE(t.name, 'null') as template_name,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'sent' THEN h.message_id END) as total_sent,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('delivered', 'sent') THEN h.message_id END) as success_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'opened' THEN h.message_id END) as opened_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'clicked' THEN h.message_id END) as clicked_count,
+				COUNT(DISTINCT CASE WHEN h.event_type IN ('failed', 'bounced') THEN h.message_id END) as error_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'delayed' THEN h.message_id END) as delayed_count,
+				COUNT(DISTINCT CASE WHEN h.event_type = 'held' THEN h.message_id END) as held_count,
+				0 as avg_response_time
+			FROM $history_table h
+			LEFT JOIN $templates_table t ON h.template_id = t.id
+			WHERE h.server_id = %d AND h.timestamp >= %s
+			GROUP BY COALESCE(t.name, 'null')
+			ORDER BY total_sent DESC",
+			$server_id,
+			$date_from
+		), ARRAY_A );
+
+		set_transient( $cache_key, $results, 60 ); // Cache 60s
+		return $results;
 	}
 
 	public static function get_template_performance( $days = 30 ) {
@@ -291,6 +393,53 @@ class Stats {
 			}
 		}
 		return $performance;
+	}
+
+	public static function get_template_stats( $template_name, $days = 30 ) {
+		global $wpdb;
+		$table_metrics = $wpdb->prefix . 'postal_metrics';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
+		$date_from = date( 'Y-m-d', strtotime( "-$days days" ) );
+
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT m.event_type, SUM(m.count) as total
+			FROM $table_metrics m
+			JOIN $table_tpl t ON m.template_id = t.id
+			WHERE t.name = %s AND m.date >= %s
+			GROUP BY m.event_type",
+			$template_name,
+			$date_from
+		), ARRAY_A ) ?: [];
+
+		$stats = [
+			'sent' => 0, 'delivered' => 0, 'opened' => 0, 'clicked' => 0, 'bounced' => 0, 'delayed' => 0, 'held' => 0
+		];
+
+		foreach ( $results as $r ) {
+			$type = $r['event_type'];
+
+			// Always add to the specific type found
+			if ( isset( $stats[$type] ) ) {
+				$stats[$type] += (int) $r['total'];
+			}
+
+			// Map 'sent' to 'delivered' as per Postal conventions (Optimistic delivery)
+			// because Postal primarily sends 'MessageSent' which we log as 'sent'.
+			if ( $type === 'sent' ) {
+				$stats['delivered'] += (int) $r['total'];
+			}
+		}
+
+		// If we tracked 'delivered' separately from 'sent' in webhook, we might want to sum them or treat them distinctly.
+		// For now, let's assume 'sent' webhook event contributes to delivered count.
+
+		// Calculate rates
+		$total_delivered = $stats['delivered'] ?? 0;
+		$stats['open_rate'] = $total_delivered > 0 ? round( ( $stats['opened'] / $total_delivered ) * 100, 1 ) : 0;
+		$stats['click_rate'] = $total_delivered > 0 ? round( ( $stats['clicked'] / $total_delivered ) * 100, 1 ) : 0;
+		$stats['bounce_rate'] = $total_delivered > 0 ? round( ( $stats['bounced'] / $total_delivered ) * 100, 1 ) : 0;
+
+		return $stats;
 	}
 
 	public static function get_global_stats( $days = 30 ) {
@@ -354,5 +503,98 @@ class Stats {
 		// $retention_detailed = 90; 
 		// $date_purge = date('Y-m-d', strtotime("-$retention_detailed days"));
 		// $wpdb->query( $wpdb->prepare( "DELETE FROM $source_table WHERE date < %s", $date_purge ) );
+	}
+
+	public static function get_advanced_charts_data( $days = 30 ) {
+		global $wpdb;
+		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
+
+		// 1. Volume per day
+		$volume = $wpdb->get_results( $wpdb->prepare(
+			"SELECT DATE(timestamp) as date, COUNT(*) as count
+			FROM $table_stats
+			WHERE timestamp >= %s AND event_type = 'sent'
+			GROUP BY DATE(timestamp) ORDER BY date ASC",
+			$date_from
+		), ARRAY_A );
+
+		// 2. Deliverability Rate per day (Delivered / Sent)
+		// Requires grouping by day and event type.
+		$daily_events = $wpdb->get_results( $wpdb->prepare(
+			"SELECT DATE(timestamp) as date, event_type, COUNT(DISTINCT message_id) as count
+			FROM $table_stats
+			WHERE timestamp >= %s
+			GROUP BY DATE(timestamp), event_type
+			ORDER BY date ASC",
+			$date_from
+		), ARRAY_A );
+
+		$metrics_by_date = [];
+		foreach ($daily_events as $row) {
+			$date = $row['date'];
+			if (!isset($metrics_by_date[$date])) {
+				$metrics_by_date[$date] = ['sent' => 0, 'delivered' => 0, 'opened' => 0, 'bounced' => 0, 'failed' => 0];
+			}
+			$metrics_by_date[$date][$row['event_type']] += (int)$row['count'];
+		}
+
+		$chart_data = [
+			'dates' => array_keys($metrics_by_date),
+			'sent' => [],
+			'deliverability' => [],
+			'open_rate' => [],
+			'errors' => []
+		];
+
+		foreach ($metrics_by_date as $date => $counts) {
+			$chart_data['sent'][] = $counts['sent'];
+
+			// Optimistic delivery: Sent contributes to potential delivery.
+			// Rate = Delivered / Sent.
+			$del_rate = ($counts['sent'] > 0) ? round(($counts['delivered'] / $counts['sent']) * 100, 2) : 0;
+			// Use sent as delivered proxy if 'delivered' webhook not enabled? No, stick to real data.
+			// If 'delivered' count > 'sent' (due to async), cap at 100?
+			if ($del_rate > 100) $del_rate = 100;
+			$chart_data['deliverability'][] = $del_rate;
+
+			$open_rate = ($counts['delivered'] > 0) ? round(($counts['opened'] / $counts['delivered']) * 100, 2) : 0;
+			if ($open_rate > 100) $open_rate = 100;
+			$chart_data['open_rate'][] = $open_rate;
+
+			$chart_data['errors'][] = $counts['bounced'] + $counts['failed'];
+		}
+
+		return $chart_data;
+	}
+
+	public static function get_heatmap_data( $days = 30 ) {
+		global $wpdb;
+		$table_stats = $wpdb->prefix . 'postal_stats_history';
+		$table_tpl = $wpdb->prefix . 'postal_templates';
+		$date_from = date( 'Y-m-d H:i:s', strtotime( "-$days days" ) );
+
+		// Heatmap: Rows=Templates, Cols=Hour(0-23), Value=Count(sent)
+		$results = $wpdb->get_results( $wpdb->prepare(
+			"SELECT t.name as template, HOUR(h.timestamp) as hour, COUNT(*) as count
+			FROM $table_stats h
+			JOIN $table_tpl t ON h.template_id = t.id
+			WHERE h.timestamp >= %s AND h.event_type = 'sent'
+			GROUP BY t.name, hour",
+			$date_from
+		), ARRAY_A );
+
+		// Format for frontend
+		// { template: { 0: 5, 1: 0, ... 23: 10 } }
+		$heatmap = [];
+		foreach ($results as $row) {
+			$tpl = $row['template'];
+			if (!isset($heatmap[$tpl])) {
+				$heatmap[$tpl] = array_fill(0, 24, 0);
+			}
+			$heatmap[$tpl][(int)$row['hour']] = (int)$row['count'];
+		}
+
+		return $heatmap;
 	}
 }

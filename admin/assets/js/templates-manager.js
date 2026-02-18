@@ -116,6 +116,12 @@
             const $item = $(html);
             $item.find('textarea').val(value);
             
+            // Remove toolbar and preview for unsupported types
+            if (!['subject', 'from_name', 'text', 'html'].includes(type)) {
+                $item.find('.pw-variant-toolbar').remove();
+                $item.find('.pw-variant-preview').remove();
+            }
+
             $container.append($item);
             
             $item.find('.pw-remove-variant').on('click', function() {
@@ -126,6 +132,88 @@
                     alert('Au moins une variante est requise pour ce champ.');
                 }
             });
+
+            // Initialize Code/Preview toggles & Base64 logic for supported types
+            if (['subject', 'from_name', 'text', 'html'].includes(type)) {
+
+                // Toggle Logic
+                $item.find('.pw-toggle-btn').on('click', function() {
+                    const mode = $(this).data('mode');
+                    const $parent = $(this).closest('.pw-variant-item');
+                    const $textarea = $parent.find('textarea');
+                    const $preview = $parent.find('.pw-variant-preview');
+
+                    $parent.find('.pw-toggle-btn').removeClass('active');
+                    $(this).addClass('active');
+
+                    if (mode === 'preview') {
+                        let content = $textarea.val();
+                        // Try decode Base64 if needed
+                        if (content.match(/^[A-Za-z0-9+/=]+\s*$/) && content.length > 20) {
+                            try {
+                                content = decodeURIComponent(escape(window.atob(content)));
+                            } catch (e) {
+                                // Not valid base64 or other error, keep original
+                            }
+                        }
+
+                        // Render based on type
+                        if (type === 'html') {
+                            $preview.html(content);
+                        } else {
+                            $preview.text(content);
+                        }
+
+                        $textarea.hide();
+                        $preview.show();
+                    } else {
+                        $preview.hide();
+                        $textarea.show();
+                    }
+                });
+
+                // Base64 Logic
+                $item.find('.pw-base64-btn').on('click', function() {
+                    const $parent = $(this).closest('.pw-variant-item');
+                    const $textarea = $parent.find('textarea');
+                    const raw = $textarea.val();
+
+                    if (!raw) return;
+
+                    try {
+                        // UTF-8 safe encoding
+                        const encoded = window.btoa(unescape(encodeURIComponent(raw)));
+                        $textarea.val(encoded);
+
+                        // Switch to code view to see result
+                        $parent.find('.pw-toggle-btn[data-mode="code"]').click();
+                    } catch (e) {
+                        console.error('Encoding error:', e);
+                        alert('Erreur lors de l\'encodage Base64');
+                    }
+                });
+
+                // Decode Base64 Logic
+                $item.find('.pw-base64-decode-btn').on('click', function() {
+                    const $parent = $(this).closest('.pw-variant-item');
+                    const $textarea = $parent.find('textarea');
+                    const raw = $textarea.val().trim();
+
+                    if (!raw) return;
+
+                    try {
+                        // UTF-8 safe decoding
+                        const decoded = decodeURIComponent(escape(window.atob(raw)));
+                        $textarea.val(decoded);
+
+                        // Switch to code view to see result
+                        $parent.find('.pw-toggle-btn[data-mode="code"]').click();
+                    } catch (e) {
+                        console.error('Decoding error:', e);
+                        alert('Erreur : Contenu invalide ou non encodé en Base64.');
+                    }
+                });
+            }
         },
 
         openBulkAdd(type) {
@@ -773,6 +861,13 @@
                 $(e.currentTarget).addClass('active');
                 $modal.find('.pw-tab-content').removeClass('active');
                 $modal.find('#pw-tab-' + tab).addClass('active');
+
+                if (tab === 'stats') {
+                    const tplName = $('#pw-editor-name').val();
+                    if (tplName) {
+                        TemplateEditor.loadStats(tplName);
+                    }
+                }
             });
         }, 
          

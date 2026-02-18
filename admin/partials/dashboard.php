@@ -21,13 +21,13 @@ $recent_errors = PW_Stats::get_recent_errors(5);
     </h1>
 
     <!-- Statistiques principales -->
-    <div class="pw-stats-cards">
+    <div class="pw-stats-widgets">
         <div class="pw-stat-card">
             <div class="pw-stat-icon">
                 <span class="dashicons dashicons-email-alt"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value"><?php echo number_format_i18n($stats['total_sent']); ?></div>
+                <div class="pw-stat-value" id="pw-d-total-sent"><?php echo number_format_i18n($stats['total_sent']); ?></div>
                 <div class="pw-stat-label"><?php _e('Emails envoyés', 'postal-warmup'); ?></div>
             </div>
         </div>
@@ -37,7 +37,7 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                 <span class="dashicons dashicons-yes-alt"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value"><?php echo $stats['success_rate']; ?>%</div>
+                <div class="pw-stat-value" id="pw-d-success-rate"><?php echo $stats['success_rate']; ?>%</div>
                 <div class="pw-stat-label"><?php _e('Taux de succès', 'postal-warmup'); ?></div>
             </div>
         </div>
@@ -47,7 +47,7 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                 <span class="dashicons dashicons-admin-site-alt3"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value">
+                <div class="pw-stat-value" id="pw-d-active-servers">
                     <?php echo $stats['active_servers']; ?> / <?php echo $stats['total_servers']; ?>
                 </div>
                 <div class="pw-stat-label"><?php _e('Serveurs actifs', 'postal-warmup'); ?></div>
@@ -59,7 +59,7 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                 <span class="dashicons dashicons-chart-line"></span>
             </div>
             <div class="pw-stat-content">
-                <div class="pw-stat-value">
+                <div class="pw-stat-value" id="pw-d-sent-today">
                     <?php echo $stats['sent_today']; ?>
                     <small style="font-size: 14px; color: <?php echo $stats['evolution'] >= 0 ? '#46b450' : '#dc3232'; ?>">
                         (<?php echo $stats['evolution'] >= 0 ? '+' : ''; ?><?php echo $stats['evolution']; ?>%)
@@ -95,7 +95,7 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                     <?php _e('Voir tous', 'postal-warmup'); ?> &rarr;
                 </a>
             </div>
-            <div class="pw-widget-content">
+            <div class="pw-widget-content" id="pw-servers-widget-content">
                 <?php
                 $servers = PW_Stats::get_servers_stats();
                 if (empty($servers)) :
@@ -145,7 +145,7 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                     <?php _e('Voir tous les logs', 'postal-warmup'); ?> &rarr;
                 </a>
             </div>
-            <div class="pw-widget-content">
+            <div class="pw-widget-content" id="pw-errors-widget-content">
                 <?php if (empty($recent_errors)) : ?>
                     <p class="pw-no-data">
                         <span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span>
@@ -188,10 +188,17 @@ $recent_errors = PW_Stats::get_recent_errors(5);
                     <tr>
                         <td><?php _e('URL du webhook', 'postal-warmup'); ?></td>
                         <td>
+                            <?php
+                            $webhook_url = rest_url('postal-warmup/v1/webhook');
+                            $secret = get_option('pw_webhook_secret');
+                            if ($secret) {
+                                $webhook_url = add_query_arg('token', $secret, $webhook_url);
+                            }
+                            ?>
                             <code style="font-size: 11px;">
-                                <?php echo rest_url('postal-warmup/v1/webhook'); ?>
+                                <?php echo esc_url($webhook_url); ?>
                             </code>
-                            <button type="button" class="button button-small pw-copy-btn" data-clipboard="<?php echo esc_attr(rest_url('postal-warmup/v1/webhook')); ?>">
+                            <button type="button" class="button button-small pw-copy-btn" data-clipboard="<?php echo esc_attr($webhook_url); ?>">
                                 <?php _e('Copier', 'postal-warmup'); ?>
                             </button>
                         </td>
@@ -222,88 +229,4 @@ $recent_errors = PW_Stats::get_recent_errors(5);
     </div>
 </div>
 
-<script>
-jQuery(document).ready(function($) {
-    // Graphique des envois
-    const ctx = document.getElementById('pw-sends-chart').getContext('2d');
-    let chart;
-    
-    function loadChartData(days) {
-        $.post(ajaxurl, {
-            action: 'pw_get_stats',
-            nonce: pwAdmin.nonce,
-            days: days
-        }, function(response) {
-            if (response.success) {
-                const stats = response.data.stats;
-                const labels = stats.map(s => s.date);
-                const sentData = stats.map(s => parseInt(s.total_sent));
-                const successData = stats.map(s => parseInt(s.total_success));
-                const errorData = stats.map(s => parseInt(s.total_errors));
-                
-                if (chart) {
-                    chart.destroy();
-                }
-                
-                chart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: '<?php _e('Envoyés', 'postal-warmup'); ?>',
-                                data: sentData,
-                                borderColor: '#2271b1',
-                                backgroundColor: 'rgba(34, 113, 177, 0.1)',
-                                tension: 0.4
-                            },
-                            {
-                                label: '<?php _e('Succès', 'postal-warmup'); ?>',
-                                data: successData,
-                                borderColor: '#46b450',
-                                backgroundColor: 'rgba(70, 180, 80, 0.1)',
-                                tension: 0.4
-                            },
-                            {
-                                label: '<?php _e('Erreurs', 'postal-warmup'); ?>',
-                                data: errorData,
-                                borderColor: '#dc3232',
-                                backgroundColor: 'rgba(220, 50, 50, 0.1)',
-                                tension: 0.4
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
-                        }
-                    }
-                });
-            }
-        });
-    }
-    
-    loadChartData(7);
-    
-    $('#pw-chart-period').on('change', function() {
-        loadChartData($(this).val());
-    });
-    
-    // Copier dans le presse-papier
-    $('.pw-copy-btn').on('click', function() {
-        const text = $(this).data('clipboard');
-        navigator.clipboard.writeText(text).then(function() {
-            alert('<?php _e('Copié !', 'postal-warmup'); ?>');
-        });
-    });
-});
-</script>
+<!-- Script JS déplacé dans admin.js pour optimisation et centralisation -->

@@ -3,6 +3,7 @@
 namespace PostalWarmup\Admin;
 
 use PostalWarmup\Services\TemplateLoader;
+use PostalWarmup\Models\Stats;
 use WP_Error;
 
 /**
@@ -16,6 +17,9 @@ class TemplateManager {
 		$table = $wpdb->prefix . 'postal_templates';
 		$results = $wpdb->get_results( "SELECT * FROM $table ORDER BY name ASC", ARRAY_A );
 		
+		// Fetch stats for all templates (last 30 days default)
+		$all_stats = Stats::get_all_templates_summary(30);
+
 		$templates = [];
 		foreach ( $results as $row ) {
 			$data = json_decode( $row['data'], true );
@@ -25,6 +29,20 @@ class TemplateManager {
 					'text'    => count( $data['text'] ?? [] ),
 					'html'    => count( $data['html'] ?? [] )
 				];
+
+				// Map stats
+				$s = $all_stats[$row['name']] ?? [];
+				$sent = (int) ($s['usage_count'] ?? 0);
+				$success = (int) ($s['success_count'] ?? 0);
+				$avg = round( (float) ($s['avg_response_time'] ?? 0), 2 );
+				$rate = $sent > 0 ? round(($success / $sent) * 100, 1) : 0;
+
+				$row['stats'] = [
+					'sent' => $sent,
+					'success_rate' => $rate,
+					'avg_time' => $avg
+				];
+
 				// Escape output
 				$row['name'] = esc_html( $row['name'] );
 				$templates[] = $row;

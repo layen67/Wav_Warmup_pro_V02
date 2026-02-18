@@ -68,39 +68,6 @@ if (!defined('ABSPATH')) {
                 </td>
             </tr>
             <tr>
-                <th scope="row"><?php _e('URL du webhook', 'postal-warmup'); ?></th>
-                <td>
-                    <?php 
-                    $secret = get_option('pw_webhook_secret');
-                    $webhook_url = rest_url('postal-warmup/v1/webhook');
-                    if ($secret) {
-                        $webhook_url = add_query_arg('token', $secret, $webhook_url);
-                    }
-                    ?>
-                    <p class="description" style="margin-bottom: 5px;">
-                        <?php _e('Copiez cette URL dans les paramètres de votre serveur Postal.', 'postal-warmup'); ?>
-                    </p>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <input type="text" 
-                               value="<?php echo esc_attr($webhook_url); ?>" 
-                               readonly 
-                               class="regular-text" 
-                               style="font-family: monospace; font-size: 11px; width: 100%;">
-                        <button type="button" class="button pw-copy-btn" data-clipboard="<?php echo esc_attr($webhook_url); ?>">
-                            <?php _e('Copier', 'postal-warmup'); ?>
-                        </button>
-                    </div>
-                    <div style="margin-top: 10px;">
-                        <button type="button" class="button button-small" id="pw-regenerate-token-btn">
-                            <?php _e('Régénérer le token', 'postal-warmup'); ?>
-                        </button>
-                        <span class="description" style="font-style: italic;">
-                            <?php _e('Attention : Régénérer le token invalidera l\'URL configurée dans Postal.', 'postal-warmup'); ?>
-                        </span>
-                    </div>
-                </td>
-            </tr>
-            <tr>
                 <th scope="row"><?php _e('Endpoint de test', 'postal-warmup'); ?></th>
                 <td>
                     <a href="<?php echo esc_url(rest_url('postal-warmup/v1/test')); ?>" target="_blank">

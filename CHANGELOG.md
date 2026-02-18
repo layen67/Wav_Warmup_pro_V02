@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.2.1] - 2025-05-20
+### Security
+- **Critical**: Added missing capability checks (`manage_options`) to all AJAX endpoints.
+- **Encryption**: Improved API key encryption with secure key generation (fallback to legacy key for backward compatibility).
+
+### Changed
+- **Architecture**: Refactored Admin AJAX handling into `PostalWarmup\Admin\AjaxHandler`.
+- **GDPR**: Added option to disable IP logging for Mailto tracker and anonymize IPs by default.
+- **Performance**: Consolidated dashboard AJAX calls into a single endpoint (`pw_get_dashboard_data`).
+- **Assets**: Localized Chart.js library to remove external CDN dependency.
+
 ## [3.2.0] - 2024-05-24
 ### Added
 - **Architecture**: Complete refactor to PSR-4 standards with `PostalWarmup` namespace.

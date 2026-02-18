@@ -14,12 +14,26 @@ class Encryption {
 
 	/**
 	 * Récupère la clé de chiffrement
-	 * Utilise SECURE_AUTH_KEY si disponible, sinon un hash du site_url
+	 * Utilise SECURE_AUTH_KEY si disponible, sinon une clé générée stockée en base.
 	 */
 	private static function get_key(): string {
 		if ( defined( 'SECURE_AUTH_KEY' ) ) {
 			return SECURE_AUTH_KEY;
 		}
+
+		$key = get_option( 'pw_encryption_key' );
+		if ( empty( $key ) ) {
+			$key = wp_generate_password( 64, true, true );
+			update_option( 'pw_encryption_key', $key );
+		}
+
+		return $key;
+	}
+
+	/**
+	 * Récupère l'ancienne clé (fallback pour les installations existantes)
+	 */
+	private static function get_legacy_key(): string {
 		return hash( 'sha256', get_site_url() );
 	}
 
@@ -75,7 +89,14 @@ class Encryption {
 
 		$decrypted = openssl_decrypt( $ciphertext, self::METHOD, $key, 0, $iv );
 
-		// Si le déchiffrement échoue, on retourne la donnée originale (transition douce)
+		// Fallback : Essayer avec l'ancienne clé si SECURE_AUTH_KEY n'est pas définie
+		// (car cela signifie qu'on est passé de la clé site_url à la clé générée)
+		if ( $decrypted === false && ! defined( 'SECURE_AUTH_KEY' ) ) {
+			$legacy_key = hash( 'sha256', self::get_legacy_key() );
+			$decrypted = openssl_decrypt( $ciphertext, self::METHOD, $legacy_key, 0, $iv );
+		}
+
+		// Si le déchiffrement échoue encore, on retourne la donnée originale
 		if ( $decrypted === false ) {
 			return $data;
 		}
